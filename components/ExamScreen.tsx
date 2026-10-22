@@ -1,13 +1,14 @@
 "use client";
 // Design Ref: §2.5 시험 화면 `/literacy/exam` — 문제·파일·남은 한도·답 입력을 한 화면에 보여 주고 10문제를 한 번에 제출한다. (작업 16번)
-// 이 작업의 범위: 문제 풀이 화면과 파일 열기(차감). AI 어시스트 대화는 17번, 새로고침 후 값 유지는 18번, 채점은 19번에서 붙인다.
+// 이 작업의 범위: 문제 풀이 화면, 파일 열기(차감), AI 어시스트 대화(17번). 새로고침 후 값 유지는 18번, 채점은 19번에서 붙인다.
 import { useEffect, useState } from "react";
-import AssistBudget from "@/components/AssistBudget";
+import ExamAssist from "@/components/ExamAssist";
 import ExamFiles from "@/components/ExamFiles";
 import ScheduleEditor from "@/components/ScheduleEditor";
-import { openFile } from "@/lib/literacy-budget";
+import { chargeQuestion, openFile } from "@/lib/literacy-budget";
 import {
   BUNDLE_ORDER,
+  appendChat,
   countAnswered,
   createExamState,
   isAnswered,
@@ -221,12 +222,22 @@ export default function ExamScreen() {
           />
         </section>
 
-        <aside aria-label="AI 어시스트" className="flex flex-col gap-3">
+        <aside aria-label="AI 어시스트" className="flex min-w-0 flex-col gap-3">
           <h2 className="text-sm font-bold">AI 어시스트 · 묶음 {bundle.id}</h2>
-          <AssistBudget budget={budget} />
-          <p className="text-xs leading-5 text-zinc-600 dark:text-zinc-300">
-            {bundle.files.length > 0 ? "내가 열어 본 파일만 참고합니다." : "이 묶음은 파일이 없어 일반 지식으로 답합니다."}
-          </p>
+          <ExamAssist
+            key={bundle.id}
+            bundle={bundle.id}
+            files={bundle.files}
+            budget={budget}
+            messages={exam.chats[bundle.id]}
+            disabled={locked}
+            onAnswered={(q, answer) =>
+              setExam((prev) => {
+                const charged = chargeQuestion(prev.budgets[bundle.id], q, answer);
+                return appendChat(setBudget(prev, bundle.id, charged.budget), bundle.id, q, answer);
+              })
+            }
+          />
         </aside>
       </div>
 

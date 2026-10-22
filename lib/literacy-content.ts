@@ -66,3 +66,10 @@ export function buildPublicSet(): LiteracySet {
 export function findLiteracyFile(id: string): LiteracyFile | undefined {
   return ALL_FILES.find((file) => file.id === id);
 }
+
+/** 어느 묶음의 파일인가. 파일이 없으면 undefined */
+export function bundleOfFile(id: string): "A" | "C" | undefined {
+  if (SET_A_FILES.some((file) => file.id === id)) return "A";
+  if (SET_C_FILES.some((file) => file.id === id)) return "C";
+  return undefined;
+}

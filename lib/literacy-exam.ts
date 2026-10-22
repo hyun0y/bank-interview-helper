@@ -19,9 +19,14 @@ export type ExamAnswers = {
   schedule: ScheduleRowInput[];
 };
 
+/** AI 어시스트와 나눈 대화 한 줄 */
+export type ChatMessage = { role: "user" | "assistant"; content: string };
+
 export type ExamState = {
   answers: ExamAnswers;
   budgets: Record<BundleId, BundleBudget>;
+  /** 묶음별 AI 어시스트 대화 기록 */
+  chats: Record<BundleId, ChatMessage[]>;
 };
 
 export const BUNDLE_ORDER: BundleId[] = ["A", "B", "C"];
@@ -34,6 +39,7 @@ export function createExamState(): ExamState {
   return {
     answers: { text: {}, schedule: [emptyScheduleRow()] },
     budgets: { A: createBundleBudget(), B: createBundleBudget(), C: createBundleBudget() },
+    chats: { A: [], B: [], C: [] },
   };
 }
 
@@ -48,6 +54,12 @@ export function setSchedule(state: ExamState, schedule: ScheduleRowInput[]): Exa
 
 export function setBudget(state: ExamState, bundle: BundleId, budget: BundleBudget): ExamState {
   return { ...state, budgets: { ...state.budgets, [bundle]: budget } };
+}
+
+/** 대화 기록에 질문과 답변을 덧붙인다. */
+export function appendChat(state: ExamState, bundle: BundleId, question: string, answer: string): ExamState {
+  const next: ChatMessage[] = [...state.chats[bundle], { role: "user", content: question }, { role: "assistant", content: answer }];
+  return { ...state, chats: { ...state.chats, [bundle]: next } };
 }
 
 function rowHasContent(row: ScheduleRowInput): boolean {
