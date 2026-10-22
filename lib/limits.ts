@@ -10,6 +10,9 @@ export const LIMITS = {
   BEI_MAX_CANDIDATES: 5,
   /** 사용자가 고를 수 있는 경험의 최대 개수 (PRD 5번 BEI 규칙) */
   BEI_MAX_SELECTED: 3,
+  /** 1분 모범 답변의 글자 수 범위(띄어쓰기 포함, PRD 5번 BEI 규칙) */
+  ANSWER_MIN_CHARS: 280,
+  ANSWER_MAX_CHARS: 320,
   /** BEI에 올리는 PDF·docx 파일의 최대 크기(바이트). 5MB (PRD 5번 BEI 규칙) */
   BEI_FILE_MAX_BYTES: 5 * 1024 * 1024,
   /** 서버가 받는 요청 본문의 최대 크기(바이트). 한글 1만 자(약 30KB)와 JSON 포장을 넉넉히 담는 크기 */

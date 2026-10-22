@@ -2,7 +2,7 @@
 // Design Ref: §2.3 BEI 입력 `/bei` — ①내용 넣기 → ②개인정보 확인 → ③경험 고르기 → ④질문·꼬리 질문을 이어 주는 부품.
 // 글은 이 화면의 상태(메모리)에만 둔다. 저장하지 않고, ②가 끝나기 전에는 서버로도 보내지 않는다. (PRD 7번)
 // ③으로 넘어갈 때 처음 한 번 AI 전달 동의를 받고, 가린 글을 /api/bei/split으로 보내 경험 후보를 찾는다.
-// ④에서는 고른 경험마다 /api/bei/generate를 동시에 불러 질문을 만든다. (경험 1개당 AI 요청 1회)
+// ④에서는 고른 경험마다 /api/bei/generate를 동시에 불러 질문·꼬리 질문·모범 답변을 만든다. (경험 1개당 AI 요청 1회)
 import { useRef, useState } from "react";
 import BeiExperiencePicker from "@/components/BeiExperiencePicker";
 import BeiInput from "@/components/BeiInput";
@@ -113,7 +113,7 @@ export default function BeiFlow() {
       const data: unknown = await response.json().catch(() => null);
       const questions = (data as GenerateResponse | null)?.questions;
       if (!response.ok || !Array.isArray(questions)) {
-        setResults((current) => ({ ...current, [key]: { status: "error", message: errorMessageOf(data, "질문을 만들지 못했습니다. 다시 시도해 주세요.") } }));
+        setResults((current) => ({ ...current, [key]: { status: "error", message: errorMessageOf(data, "질문과 답변을 만들지 못했습니다. 다시 시도해 주세요.") } }));
         return;
       }
       setResults((current) => ({ ...current, [key]: { status: "done", questions } }));
@@ -132,11 +132,11 @@ export default function BeiFlow() {
     setPickNotice(null);
     const agreed = await ensureConsent();
     if (!agreed) {
-      setPickNotice("AI 전달에 동의하지 않아 질문을 만들지 않았습니다. 동의하면 질문을 만들 수 있습니다.");
+      setPickNotice("AI 전달에 동의하지 않아 질문과 답변을 만들지 않았습니다. 동의하면 만들 수 있습니다.");
       return;
     }
     setStep("result");
-    // 이미 만든 경험은 건너뛰고, 나머지를 동시에 만든다. ("만들기 후 3분 이내" 목표)
+    // 이미 만든 경험은 건너뛰고, 나머지를 동시에 만든다. ("만들기 후 3분 이내" 목표 — 경험 3개를 동시에 만들면 약 30~40초)
     const toRun = pickedCandidates.filter((candidate) => {
       const status = results[candidate.excerpt]?.status;
       return status !== "done" && status !== "loading";

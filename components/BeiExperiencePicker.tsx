@@ -1,6 +1,6 @@
 "use client";
 // Design Ref: §2.3 BEI 입력 `/bei` ③ 경험 고르기 — 후보(최대 5개) 중 3개까지 고르고, 후보를 누르면 원문 구간을 볼 수 있다.
-// [질문·답변 만들기]는 작업 9·10번에서 이어서 만든다.
+// [질문·답변 만들기]는 고른 경험마다 질문과 1분 모범 답변을 만든다. (작업 9·10번)
 import type { ExperienceCandidate } from "@/lib/bei-types";
 import { LIMITS } from "@/lib/limits";
 
@@ -11,7 +11,7 @@ type Props = {
   onToggle: (id: string) => void;
   /** ②로 돌아가기 */
   onBack: () => void;
-  /** [질문 만들기] — 고른 경험마다 질문·꼬리 질문을 만든다 */
+  /** [질문·답변 만들기] — 고른 경험마다 질문·꼬리 질문·모범 답변을 만든다 */
   onGenerate: () => void;
   /** 질문을 만들 수 없을 때(예: 동의 거부) 보여 줄 안내 */
   notice: string | null;
@@ -99,13 +99,13 @@ export default function BeiExperiencePicker({ candidates, selected, onToggle, on
             data-testid="pick-next"
             className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
           >
-            질문 만들기
+            질문·답변 만들기
           </button>
         </div>
         <p className="text-sm text-zinc-600 dark:text-zinc-300">
           {selected.length === 0
             ? "경험을 하나 이상 골라 주세요."
-            : `고른 경험 ${selected.length}개마다 AI가 질문 5개와 꼬리 질문을 만듭니다. (경험 1개당 AI 요청 1회) 모범 답변은 다음 작업에서 이어서 만들어집니다.`}
+            : `고른 경험 ${selected.length}개마다 AI가 질문 5개, 꼬리 질문, 1분 모범 답변을 만듭니다. (경험 1개당 AI 요청 1회, 30초 안팎)`}
         </p>
         {notice && (
           <p data-testid="pick-notice" role="alert" className="text-sm font-medium text-red-600">

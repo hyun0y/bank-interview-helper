@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
     return Response.json({
       keyConfigured: isAiConfigured(),
       model: getModel(),
+      qualityModel: getModel("quality"),
       limits: LIMITS,
       rateLimit: getRateLimitConfig(),
     });
