@@ -14,9 +14,11 @@ type Props = {
   message: string | null;
   onOpen: (fileId: string) => void;
   onClose: () => void;
+  /** 다른 탭이 시험 중이라 파일을 열 수 없을 때 */
+  disabled?: boolean;
 };
 
-export default function ExamFiles({ files, openedIds, viewingId, viewingContent, loadingId, message, onOpen, onClose }: Props) {
+export default function ExamFiles({ files, openedIds, viewingId, viewingContent, loadingId, message, onOpen, onClose, disabled = false }: Props) {
   if (files.length === 0) return null;
   const viewing = files.find((file) => file.id === viewingId);
 
@@ -36,7 +38,7 @@ export default function ExamFiles({ files, openedIds, viewingId, viewingContent,
                 type="button"
                 data-testid={`file-${file.id}`}
                 onClick={() => onOpen(file.id)}
-                disabled={loadingId !== null}
+                disabled={loadingId !== null || (disabled && !opened)}
                 aria-pressed={selected}
                 className={`flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-sm disabled:opacity-60 ${selected ? "border-zinc-900 bg-zinc-100 dark:border-zinc-100 dark:bg-zinc-800" : "border-zinc-300 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"}`}
               >

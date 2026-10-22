@@ -1,23 +1,30 @@
 "use client";
 // Design Ref: §2.5 시험 화면 `/literacy/exam` — 문제·파일·남은 한도·답 입력을 한 화면에 보여 주고 10문제를 한 번에 제출한다. (작업 16번)
-// 이 작업의 범위: 문제 풀이 화면, 파일 열기(차감), AI 어시스트 대화(17번). 새로고침 후 값 유지는 18번, 채점은 19번에서 붙인다.
+// 이 작업의 범위: 문제 풀이 화면, 파일 열기(차감), AI 어시스트 대화(17번). 시험 상태 저장·두 탭 방지(18번). 채점은 19번에서 붙인다.
 import { useEffect, useState } from "react";
 import ExamAssist from "@/components/ExamAssist";
 import ExamFiles from "@/components/ExamFiles";
 import ScheduleEditor from "@/components/ScheduleEditor";
+import StorageNotice from "@/components/StorageNotice";
 import { chargeQuestion, openFile } from "@/lib/literacy-budget";
 import {
   BUNDLE_ORDER,
   appendChat,
   countAnswered,
-  createExamState,
   isAnswered,
+  isExamState,
+  prepareExamState,
   setBudget,
+  setCurrentIndex,
   setSchedule,
+  setSubmitted,
   setTextAnswer,
   type ExamState,
 } from "@/lib/literacy-exam";
 import type { LiteracySet, PublicQuestion } from "@/lib/literacy-types";
+import { parseStored, readRaw, removeItem, STORAGE_KEYS } from "@/lib/storage";
+import { useExamTabLock } from "@/lib/use-exam-tab-lock";
+import { useStoredValue } from "@/lib/use-stored-value";
 
 type LoadState = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; set: LiteracySet };
 
@@ -57,14 +64,16 @@ function OxButtons({ question, value, onChange, disabled }: { question: PublicQu
 
 export default function ExamScreen() {
   const [load, setLoad] = useState<LoadState>({ status: "loading" });
-  const [exam, setExam] = useState<ExamState>(createExamState);
-  const [index, setIndex] = useState(0);
+  // 시험 상태(답·한도·열어 본 파일·대화)는 이 브라우저에 저장해 두고, 새로고침해도 이어서 한다. (작업 18번)
+  const [stored, save] = useStoredValue<ExamState>(STORAGE_KEYS.examState, isExamState);
+  const tab = useExamTabLock();
+  const [viewIndex, setViewIndex] = useState<number | null>(null);
+  const [restarting, setRestarting] = useState(false);
   const [contents, setContents] = useState<Record<string, string>>({});
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [fileMessage, setFileMessage] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,14 +105,26 @@ export default function ExamScreen() {
   }
 
   const { set } = load;
+  const exam = prepareExamState(stored, set);
+  const isOwner = tab.status === "owner";
+  const submitted = exam.submitted;
+  const index = viewIndex ?? exam.currentIndex;
   const question = set.questions[index];
   const bundle = set.bundles.find((b) => b.id === question.bundle)!;
   const budget = exam.budgets[bundle.id];
   const answeredCount = countAnswered(set.questions, exam.answers);
-  const locked = submitted;
+  // 제출했거나, 다른 탭이 시험 화면을 쓰는 중이면 이 탭에서는 답을 바꿀 수 없다.
+  const locked = submitted || !isOwner;
+
+  /** 저장해 둔 최신 상태를 읽어 바꾼 뒤 다시 저장한다. (비동기 작업이 끝날 때도 오래된 값을 덮어쓰지 않게) */
+  function updateExam(change: (prev: ExamState) => ExamState) {
+    if (!isOwner) return;
+    save(change(prepareExamState(parseStored(readRaw(STORAGE_KEYS.examState), isExamState), set)));
+  }
 
   function goTo(next: number) {
-    setIndex(next);
+    setViewIndex(next);
+    updateExam((prev) => setCurrentIndex(prev, next));
     setViewingId(null);
     setFileMessage(null);
     setConfirming(false);
@@ -121,6 +142,8 @@ export default function ExamScreen() {
       setViewingId(null);
       return;
     }
+    // 다른 탭이 시험 중이면 새 파일을 열어 토큰을 차감할 수 없다. (이미 열어 둔 파일은 볼 수 있다)
+    if (!isOwner && !budget.openedFileIds.includes(fileId)) return;
     setFileMessage(null);
     if (contents[fileId] === undefined) {
       setLoadingId(fileId);
@@ -135,9 +158,9 @@ export default function ExamScreen() {
       }
       setLoadingId(null);
     }
-    const result = openFile(budget, fileId, file.tokens);
+    const result = openFile(prepareExamState(parseStored(readRaw(STORAGE_KEYS.examState), isExamState), set).budgets[bundle.id], fileId, file.tokens);
     if (result.firstOpen) {
-      setExam((prev) => setBudget(prev, bundle.id, result.budget));
+      updateExam((prev) => setBudget(prev, bundle.id, openFile(prev.budgets[bundle.id], fileId, file.tokens).budget));
       setFileMessage(
         result.charged < file.tokens
           ? `처음 열어서 남은 토큰 ${result.charged.toLocaleString("ko-KR")}개만 차감되었습니다. 이 묶음의 토큰이 모두 소진되었습니다.`
@@ -149,8 +172,55 @@ export default function ExamScreen() {
     setViewingId(fileId);
   }
 
+  function restart() {
+    removeItem(STORAGE_KEYS.examState);
+    setViewIndex(null);
+    setViewingId(null);
+    setFileMessage(null);
+    setConfirming(false);
+    setRestarting(false);
+  }
+
   return (
     <div className="flex flex-col gap-4">
+      <StorageNotice />
+
+      {tab.status === "other" && (
+        <div data-testid="other-tab" role="status" className="rounded-md border border-amber-400 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900 dark:border-amber-500 dark:bg-amber-950 dark:text-amber-100">
+          <p className="font-medium">다른 탭에서 진행 중입니다.</p>
+          <p>같은 시험을 두 탭에서 풀면 서로의 답을 덮어쓰게 되어, 이 탭에서는 볼 수만 있습니다. 다른 탭을 닫은 뒤 아래 버튼을 눌러 이 탭에서 이어서 풀 수 있습니다.</p>
+          <button type="button" data-testid="other-tab-retry" onClick={tab.retry} className="mt-2 rounded-md border border-amber-600 px-3 py-1.5 hover:bg-amber-100 dark:hover:bg-amber-900">
+            이 탭에서 이어서 하기
+          </button>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p data-testid="resume-note" className="text-xs text-zinc-600 dark:text-zinc-300">
+          답과 남은 한도는 이 브라우저에 자동으로 저장되어, 새로고침해도 이어서 풀 수 있습니다.
+        </p>
+        {isOwner && !restarting && (
+          <button type="button" data-testid="restart-start" onClick={() => setRestarting(true)} className="rounded-md border border-zinc-400 px-3 py-1.5 text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800">
+            처음부터 다시 시작
+          </button>
+        )}
+      </div>
+
+      {restarting && (
+        <div data-testid="restart-confirm" role="alertdialog" aria-label="다시 시작 확인" className="rounded-md border border-red-400 p-4 text-sm leading-6">
+          <p className="font-medium">처음부터 다시 시작할까요?</p>
+          <p className="text-zinc-600 dark:text-zinc-300">입력한 답, 어시스트 대화, 열어 본 파일, 남은 토큰·질문 횟수가 모두 처음 상태로 돌아갑니다.</p>
+          <div className="mt-3 flex gap-2">
+            <button type="button" data-testid="restart-yes" onClick={restart} className="rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700">
+              처음부터 다시 시작
+            </button>
+            <button type="button" data-testid="restart-no" onClick={() => setRestarting(false)} className="rounded-md border border-zinc-400 px-4 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+              취소
+            </button>
+          </div>
+        </div>
+      )}
+
       <nav aria-label="묶음" className="flex flex-wrap gap-2">
         {set.bundles.map((b) => {
           const selected = b.id === bundle.id;
@@ -190,7 +260,7 @@ export default function ExamScreen() {
           </div>
 
           {question.kind === "ox" && (
-            <OxButtons question={question} value={exam.answers.text[question.id] ?? ""} onChange={(v) => setExam((prev) => setTextAnswer(prev, question.id, v))} disabled={locked} />
+            <OxButtons question={question} value={exam.answers.text[question.id] ?? ""} onChange={(v) => updateExam((prev) => setTextAnswer(prev, question.id, v))} disabled={locked} />
           )}
 
           {question.kind === "short" && (
@@ -199,7 +269,7 @@ export default function ExamScreen() {
               <input
                 data-testid="short-answer"
                 value={exam.answers.text[question.id] ?? ""}
-                onChange={(e) => setExam((prev) => setTextAnswer(prev, question.id, e.target.value))}
+                onChange={(e) => updateExam((prev) => setTextAnswer(prev, question.id, e.target.value))}
                 disabled={locked}
                 className="rounded-md border border-zinc-400 bg-transparent px-3 py-2 disabled:opacity-50"
               />
@@ -207,7 +277,7 @@ export default function ExamScreen() {
           )}
 
           {question.kind === "schedule" && question.columns && (
-            <ScheduleEditor columns={question.columns} rows={exam.answers.schedule} onChange={(rows) => setExam((prev) => setSchedule(prev, rows))} disabled={locked} />
+            <ScheduleEditor columns={question.columns} rows={exam.answers.schedule} onChange={(rows) => updateExam((prev) => setSchedule(prev, rows))} disabled={locked} />
           )}
 
           <ExamFiles
@@ -219,6 +289,7 @@ export default function ExamScreen() {
             message={fileMessage}
             onOpen={handleOpenFile}
             onClose={() => setViewingId(null)}
+            disabled={!isOwner}
           />
         </section>
 
@@ -232,7 +303,7 @@ export default function ExamScreen() {
             messages={exam.chats[bundle.id]}
             disabled={locked}
             onAnswered={(q, answer) =>
-              setExam((prev) => {
+              updateExam((prev) => {
                 const charged = chargeQuestion(prev.budgets[bundle.id], q, answer);
                 return appendChat(setBudget(prev, bundle.id, charged.budget), bundle.id, q, answer);
               })
@@ -289,7 +360,7 @@ export default function ExamScreen() {
                 type="button"
                 data-testid="submit-confirm-yes"
                 onClick={() => {
-                  setSubmitted(true);
+                  updateExam((prev) => setSubmitted(prev, true));
                   setConfirming(false);
                 }}
                 className="rounded-md bg-zinc-900 px-4 py-2 text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900"
