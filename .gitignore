@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# bkit 플러그인 상태, Claude 화면 확인 설정 (개인 작업 파일)
+/.bkit/
+/.claude/
