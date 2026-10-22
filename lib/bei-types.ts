@@ -13,3 +13,26 @@ export type ExperienceCandidate = {
 };
 
 export type SplitResponse = { candidates: ExperienceCandidate[] };
+
+// Design Ref: §4 `/api/bei/generate` — 질문 5개, 질문마다 꼬리 질문 2개. (작업 9번)
+//   모범 답변·근거·평가 기준은 작업 10번에서 이 모양에 이어 붙인다.
+
+/** 꼬리 질문 하나. 꼬리 질문에는 답변을 대신 써 주지 않고 "답변 방향 한 줄"만 붙인다. (PRD 5번) */
+export type FollowUp = {
+  question: string;
+  /** 이 꼬리 질문에 답할 때 경험의 어떤 부분을 짚으면 좋은지 한 줄 */
+  answerDirection: string;
+  /** 경험 글에 없는 정보를 묻는 꼬리 질문인가. true면 "경험에서 확인되지 않음, 보완 필요"로 표시한다. */
+  missingInfo: boolean;
+};
+
+export type BeiQuestion = {
+  /** q1 ~ q5 */
+  id: string;
+  question: string;
+  /** 이 질문이 확인하려는 평가 기준의 번호(lib/bei-criteria.ts). 알 수 없는 값이면 비워 둔다. */
+  criterionId?: string;
+  followUps: FollowUp[];
+};
+
+export type GenerateResponse = { questions: BeiQuestion[] };
