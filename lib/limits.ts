@@ -23,4 +23,8 @@ export const LIMITS = {
   AI_REQUESTS_PER_WINDOW: 100,
   /** 위 요청 수를 세는 시간(초). 1시간 */
   AI_WINDOW_SECONDS: 3600,
+  /** AI 리터러시: 같은 자료를 함께 쓰는 문제 묶음 1개당 토큰 한도. 코드의 설정값으로만 바꾼다. (PRD 5번) */
+  LITERACY_BUNDLE_TOKENS: 20_000,
+  /** AI 리터러시: 문제 묶음 1개당 AI 어시스트에 질문할 수 있는 횟수 (PRD 5번) */
+  LITERACY_BUNDLE_QUESTIONS: 10,
 } as const;
