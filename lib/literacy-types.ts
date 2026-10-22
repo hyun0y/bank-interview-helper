@@ -122,3 +122,48 @@ export type LiteracySet = {
   bundles: PublicBundle[];
   questions: PublicQuestion[];
 };
+
+// ---- 채점 결과 모양 (제출한 뒤에만 브라우저로 내려가며, 정답·해설이 들어 있다) ----
+
+export type QuestionGrade = {
+  id: string;
+  number: number;
+  bundle: BundleId;
+  kind: "short" | "ox";
+  /** 문제 지문 */
+  prompt: string;
+  points: number;
+  earned: number;
+  correct: boolean;
+  /** 내가 쓴 답 (쓰지 않았으면 빈 글자) */
+  userAnswer: string;
+  correctAnswer: string;
+  explanation: string;
+};
+
+export type ScheduleCellsGrade = { date: string; time: string; title: string; place: string; attendees: string };
+
+export type ScheduleGrade = {
+  id: string;
+  number: number;
+  prompt: string;
+  points: number;
+  earned: number;
+  correctRows: number;
+  wrongRows: number;
+  answerRowCount: number;
+  /** 내가 제출한 줄과 맞았는지 */
+  submitted: { row: ScheduleCellsGrade; status: "correct" | "wrong" }[];
+  /** 정답 일정표 (해설 포함) */
+  answerRows: (ScheduleCellsGrade & { reason: string })[];
+  /** 일정표에 넣지 않는 항목과 이유 */
+  excluded: string[];
+};
+
+export type GradeResponse = {
+  total: number;
+  max: number;
+  bundleScores: Record<BundleId, { earned: number; max: number }>;
+  questions: QuestionGrade[];
+  schedule: ScheduleGrade;
+};

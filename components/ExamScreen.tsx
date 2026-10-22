@@ -1,6 +1,8 @@
 "use client";
 // Design Ref: §2.5 시험 화면 `/literacy/exam` — 문제·파일·남은 한도·답 입력을 한 화면에 보여 주고 10문제를 한 번에 제출한다. (작업 16번)
-// 이 작업의 범위: 문제 풀이 화면, 파일 열기(차감), AI 어시스트 대화(17번). 시험 상태 저장·두 탭 방지(18번). 채점은 19번에서 붙인다.
+// 이 작업의 범위: 문제 풀이 화면, 파일 열기(차감), AI 어시스트 대화(17번). 시험 상태 저장·두 탭 방지(18번). 제출·채점 연결(19번).
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import ExamAssist from "@/components/ExamAssist";
 import ExamFiles from "@/components/ExamFiles";
@@ -21,8 +23,10 @@ import {
   setTextAnswer,
   type ExamState,
 } from "@/lib/literacy-exam";
-import type { LiteracySet, PublicQuestion } from "@/lib/literacy-types";
-import { parseStored, readRaw, removeItem, STORAGE_KEYS } from "@/lib/storage";
+import { buildExamResult } from "@/lib/exam-result";
+import type { GradeResponse, LiteracySet, PublicQuestion } from "@/lib/literacy-types";
+import { checkScheduleFormat, type ScheduleFormatError } from "@/lib/schedule-format";
+import { parseStored, readRaw, removeItem, saveItem, STORAGE_KEYS } from "@/lib/storage";
 import { useExamTabLock } from "@/lib/use-exam-tab-lock";
 import { useStoredValue } from "@/lib/use-stored-value";
 
@@ -69,6 +73,11 @@ export default function ExamScreen() {
   const tab = useExamTabLock();
   const [viewIndex, setViewIndex] = useState<number | null>(null);
   const [restarting, setRestarting] = useState(false);
+  const router = useRouter();
+  // 제출 전 서술형 형식 검사에서 나온 오류, 채점 요청 중 여부, 채점 실패 안내 (작업 19번)
+  const [formatErrors, setFormatErrors] = useState<ScheduleFormatError[]>([]);
+  const [grading, setGrading] = useState(false);
+  const [gradeError, setGradeError] = useState<string | null>(null);
   const [contents, setContents] = useState<Record<string, string>>({});
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -172,8 +181,56 @@ export default function ExamScreen() {
     setViewingId(fileId);
   }
 
+  /** [10문제 제출]: 서술형 형식을 먼저 검사하고, 오류가 있으면 그 문제로 데려가 고치게 한다. */
+  function startSubmit() {
+    setGradeError(null);
+    const errors = checkScheduleFormat(exam.answers.schedule);
+    setFormatErrors(errors);
+    if (errors.length > 0) {
+      const scheduleIndex = set.questions.findIndex((q) => q.kind === "schedule");
+      if (scheduleIndex >= 0) goTo(scheduleIndex);
+      return;
+    }
+    setConfirming(true);
+  }
+
+  /** [제출하기]: 서버에서 채점한 뒤에만 "제출함"으로 바꾸고 결과를 저장한다. 채점에 실패하면 제출되지 않는다. */
+  async function submitExam() {
+    if (grading || !isOwner) return;
+    setGrading(true);
+    setGradeError(null);
+    try {
+      const response = await fetch("/api/literacy/grade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: exam.answers.text, schedule: exam.answers.schedule.filter((row) => Object.values(row).some((cell) => cell.trim() !== "")) }),
+      });
+      const data = await response.json().catch(() => null);
+      if (response.status === 400 && data?.error?.code === "schedule_format") {
+        setFormatErrors(data.error.errors as ScheduleFormatError[]);
+        setConfirming(false);
+        const scheduleIndex = set.questions.findIndex((q) => q.kind === "schedule");
+        if (scheduleIndex >= 0) goTo(scheduleIndex);
+        return;
+      }
+      if (!response.ok) throw new Error(data?.error?.message ?? "채점하지 못했습니다.");
+      const result = buildExamResult(data as GradeResponse, exam.budgets);
+      saveItem(STORAGE_KEYS.examResult, result);
+      updateExam((prev) => setSubmitted(prev, true));
+      setConfirming(false);
+      router.push("/literacy/result");
+    } catch (err) {
+      setGradeError(`${err instanceof Error ? err.message : "채점하지 못했습니다."} 제출되지 않았으니 다시 시도해 주세요.`);
+    } finally {
+      setGrading(false);
+    }
+  }
+
   function restart() {
+    removeItem(STORAGE_KEYS.examResult);
     removeItem(STORAGE_KEYS.examState);
+    setFormatErrors([]);
+    setGradeError(null);
     setViewIndex(null);
     setViewingId(null);
     setFileMessage(null);
@@ -277,7 +334,13 @@ export default function ExamScreen() {
           )}
 
           {question.kind === "schedule" && question.columns && (
-            <ScheduleEditor columns={question.columns} rows={exam.answers.schedule} onChange={(rows) => updateExam((prev) => setSchedule(prev, rows))} disabled={locked} />
+            <ScheduleEditor columns={question.columns} rows={exam.answers.schedule} onChange={(rows) => {
+                setFormatErrors([]);
+                updateExam((prev) => setSchedule(prev, rows));
+              }}
+              disabled={locked}
+              errors={formatErrors}
+            />
           )}
 
           <ExamFiles
@@ -341,7 +404,7 @@ export default function ExamScreen() {
           <button
             type="button"
             data-testid="submit-start"
-            onClick={() => setConfirming(true)}
+            onClick={startSubmit}
             className="w-fit rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
           >
             10문제 제출
@@ -359,25 +422,38 @@ export default function ExamScreen() {
               <button
                 type="button"
                 data-testid="submit-confirm-yes"
-                onClick={() => {
-                  updateExam((prev) => setSubmitted(prev, true));
-                  setConfirming(false);
-                }}
-                className="rounded-md bg-zinc-900 px-4 py-2 text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900"
+                onClick={() => void submitExam()}
+                disabled={grading}
+                className="rounded-md bg-zinc-900 px-4 py-2 text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
               >
-                제출하기
+                {grading ? "채점하는 중…" : "제출하기"}
               </button>
-              <button type="button" data-testid="submit-confirm-no" onClick={() => setConfirming(false)} className="rounded-md border border-zinc-400 px-4 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+              <button type="button" data-testid="submit-confirm-no" disabled={grading} onClick={() => setConfirming(false)} className="rounded-md border border-zinc-400 px-4 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-800">
                 계속 풀기
               </button>
             </div>
           </div>
         )}
 
-        {submitted && (
-          <p data-testid="submitted" role="status" className="rounded-md border border-zinc-400 px-4 py-3 text-sm leading-6">
-            제출했습니다. ({set.questions.length}문제 중 {answeredCount}문제에 답함) 채점과 정답·해설 화면은 다음 단계에서 연결됩니다.
+        {formatErrors.length > 0 && !submitted && (
+          <p data-testid="format-errors" role="alert" className="rounded-md border border-red-400 px-4 py-3 text-sm font-medium text-red-700 dark:text-red-300">
+            서술형 일정표에 형식 오류가 {formatErrors.length}건 있어 제출하지 못했습니다. 문제 10의 표에서 빨간 칸을 고쳐 주세요.
           </p>
+        )}
+
+        {gradeError && (
+          <p data-testid="grade-error" role="alert" className="rounded-md border border-red-400 px-4 py-3 text-sm font-medium text-red-700 dark:text-red-300">
+            {gradeError}
+          </p>
+        )}
+
+        {submitted && (
+          <div data-testid="submitted" role="status" className="flex flex-wrap items-center gap-3 rounded-md border border-zinc-400 px-4 py-3 text-sm leading-6">
+            <span>제출을 마쳤습니다. ({set.questions.length}문제 중 {answeredCount}문제에 답함)</span>
+            <Link href="/literacy/result" data-testid="result-link" className="font-medium underline">
+              채점 결과 보기
+            </Link>
+          </div>
         )}
       </div>
     </div>

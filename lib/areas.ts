@@ -26,7 +26,7 @@ export const AREAS: Area[] = [
     title: "AI 리터러시 면접",
     subtitle: "모의 시험",
     description: "여러 파일과 AI 어시스트로 푸는 10문제 모의 시험입니다. 토큰과 질문 횟수가 제한됩니다.",
-    ready: false,
+    ready: true,
   },
   {
     id: "debate",
