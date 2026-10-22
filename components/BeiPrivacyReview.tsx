@@ -24,6 +24,12 @@ type Props = {
   onReset: () => void;
   /** ①로 돌아가기 */
   onBack: () => void;
+  /** [다음: 경험 고르기] — 동의 확인 후 글을 AI에 보내 경험 후보를 찾는다 */
+  onNext: () => void;
+  /** 경험 후보를 찾는 중인가 */
+  finding: boolean;
+  /** 경험 후보를 찾지 못했을 때 보여 줄 안내 */
+  findError: string | null;
 };
 
 const KINDS: PersonalInfoKind[] = ["phone", "email", "resident-id"];
@@ -33,7 +39,7 @@ function describeCounts(counts: PersonalInfoCounts): string {
   return parts.join(" · ");
 }
 
-export default function BeiPrivacyReview({ value, onChange, autoCounts, onReset, onBack }: Props) {
+export default function BeiPrivacyReview({ value, onChange, autoCounts, onReset, onBack, onNext, finding, findError }: Props) {
   const [termInput, setTermInput] = useState("");
   const [termMessage, setTermMessage] = useState("");
   const textareaId = useId();
@@ -187,14 +193,22 @@ export default function BeiPrivacyReview({ value, onChange, autoCounts, onReset,
           </button>
           <button
             type="button"
-            disabled
+            disabled={!check.ok || finding}
+            onClick={onNext}
             data-testid="review-next"
-            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
           >
-            다음: 경험 고르기
+            {finding ? "경험을 찾는 중…" : "다음: 경험 고르기"}
           </button>
         </div>
-        <p className="text-sm text-zinc-600 dark:text-zinc-300">경험 후보 찾기(AI 호출)는 다음 단계에서 이어서 만들어집니다.</p>
+        <p className="text-sm text-zinc-600 dark:text-zinc-300">
+          누르면 위의 글을 AI 서비스로 보내 경험 후보를 찾습니다. 처음 한 번은 AI 전달 동의를 받습니다. (AI 요청 1회)
+        </p>
+        {findError && (
+          <p data-testid="find-error" role="alert" className="text-sm font-medium text-red-600">
+            {findError}
+          </p>
+        )}
       </section>
     </div>
   );
