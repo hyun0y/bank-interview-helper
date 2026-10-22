@@ -23,4 +23,7 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  /* 한국어는 단어 중간에서 줄을 바꾸지 않고, 너무 긴 글자만 칸 끝에서 줄을 바꾼다 */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
