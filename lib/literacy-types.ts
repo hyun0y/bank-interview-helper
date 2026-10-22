@@ -18,3 +18,33 @@ export type OxAnswer = {
   /** 왜 그 답인지 쉬운 말로 풀어 쓴 해설 */
   explanation: string;
 };
+
+/** 묶음 A·C의 파일 한 개 (가상 자료). 서버 폴더에만 있고, 열어 본 것만 브라우저로 내려간다. */
+export type LiteracyFile = {
+  /** 파일 번호표 (예: "a1") */
+  id: string;
+  /** 파일 목록에 보이는 이름 */
+  name: string;
+  /** 파일 내용 (글) */
+  content: string;
+};
+
+/** 묶음 A 문제 — 단답형 주관식. 정답이 없어서 브라우저로 내려보내도 되는 부분 */
+export type ShortQuestion = {
+  id: string;
+  /** 문제 지문 */
+  prompt: string;
+  /** 답을 어떤 모양으로 쓰는지 안내 (예: 숫자만, 쉼표 없이) */
+  format: string;
+};
+
+/** 묶음 A 정답·해설 — 서버에서만 읽는다. */
+export type ShortAnswer = {
+  id: string;
+  /** 정답. 띄어쓰기를 뺀 뒤 똑같은지 비교한다. */
+  answer: string;
+  /** 정답으로 함께 인정하는 다른 표기 (선택) */
+  accepted?: string[];
+  /** 계산 과정을 쉬운 말로 풀어 쓴 해설 */
+  explanation: string;
+};
