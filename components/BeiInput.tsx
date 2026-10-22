@@ -2,18 +2,23 @@
 // Design Ref: §2.3 BEI 입력 `/bei` ① 내용 넣기 — 글 붙여넣기 칸 + PDF·워드 올리기.
 //   HWP·글자를 읽을 수 없는 파일 안내, 1만 자 초과 시 다음 단계로 못 감.
 // 자기소개서 원본은 이 화면의 상태(메모리)에만 있다. 저장하지 않고 서버로도 보내지 않는다. (PRD 7번)
-// ②개인정보 확인은 작업 7번, ③경험 고르기는 작업 8번에서 이어서 만든다.
-import { useId, useRef, useState, type ChangeEvent } from "react";
+// 글 내용은 부모(BeiFlow)가 들고 있고, 이 부품은 입력 칸과 파일 읽기만 맡는다.
+import { useId, useState, type ChangeEvent, type Dispatch, type SetStateAction } from "react";
 import { checkTextLength, extractTextFromFile, normalizeText } from "@/lib/file-text";
 import { LIMITS } from "@/lib/limits";
 
 type FileNote = { name: string; ok: boolean; message: string };
 
-export default function BeiInput() {
-  const [text, setText] = useState("");
+type Props = {
+  text: string;
+  onTextChange: Dispatch<SetStateAction<string>>;
+  /** 입력이 통과된 상태에서 [다음]을 눌렀을 때 */
+  onNext: () => void;
+};
+
+export default function BeiInput({ text, onTextChange, onNext }: Props) {
   const [notes, setNotes] = useState<FileNote[]>([]);
   const [reading, setReading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaId = useId();
   const fileHelpId = useId();
 
@@ -38,13 +43,13 @@ export default function BeiInput() {
       }
     }
     // 읽은 글은 아래 칸의 기존 글 뒤에 이어 붙인다. (자기소개서와 경험 정리 파일을 함께 쓸 수 있게)
-    if (pieces.length > 0) setText((current) => normalizeText([current, ...pieces].filter(Boolean).join("\n\n")));
+    if (pieces.length > 0) onTextChange((current) => normalizeText([current, ...pieces].filter(Boolean).join("\n\n")));
     setNotes(nextNotes);
     setReading(false);
   }
 
   function handleClear() {
-    setText("");
+    onTextChange("");
     setNotes([]);
   }
 
@@ -63,7 +68,7 @@ export default function BeiInput() {
             id={textareaId}
             data-testid="bei-text"
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => onTextChange(e.target.value)}
             rows={12}
             aria-invalid={overLimit}
             aria-describedby={`${textareaId}-count`}
@@ -86,7 +91,6 @@ export default function BeiInput() {
           <span className="text-sm font-medium">또는 파일 올리기 (PDF · 워드)</span>
           <div className="flex flex-wrap items-center gap-3">
             <input
-              ref={fileInputRef}
               type="file"
               accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               multiple
@@ -132,17 +136,16 @@ export default function BeiInput() {
       <section aria-label="다음 단계" className="flex flex-col gap-2 border-t border-zinc-200 pt-4 dark:border-zinc-800">
         <button
           type="button"
-          disabled
+          disabled={!check.ok}
+          onClick={onNext}
           data-testid="bei-next"
           data-ready={check.ok}
-          className="w-fit rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+          className="w-fit rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
         >
           다음: 개인정보 확인
         </button>
         <p className="text-sm text-zinc-600 dark:text-zinc-300" data-testid="bei-next-hint">
-          {check.ok
-            ? "입력이 확인되었습니다. 개인정보 확인 단계는 곧 이어서 만들어집니다."
-            : check.message}
+          {check.ok ? "다음 단계에서 연락처·주민번호·이메일을 자동으로 가리고, AI로 보내기 전에 확인합니다." : check.message}
         </p>
       </section>
     </div>
