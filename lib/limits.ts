@@ -10,6 +10,8 @@ export const LIMITS = {
   BEI_MAX_CANDIDATES: 5,
   /** 사용자가 고를 수 있는 경험의 최대 개수 (PRD 5번 BEI 규칙) */
   BEI_MAX_SELECTED: 3,
+  /** 브라우저에 저장해 두는 BEI 결과의 최대 개수. 넘으면 가장 오래된 것부터 지운다. (PRD 5번 BEI 규칙) */
+  BEI_MAX_SAVED_RESULTS: 5,
   /** 1분 모범 답변의 글자 수 범위(띄어쓰기 포함, PRD 5번 BEI 규칙) */
   ANSWER_MIN_CHARS: 280,
   ANSWER_MAX_CHARS: 320,

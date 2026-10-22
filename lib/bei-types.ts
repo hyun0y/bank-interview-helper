@@ -58,6 +58,10 @@ export type BeiAnswer = {
   needsSupplement: boolean;
   /** 무엇이 부족한지 한 줄 */
   supplementNote?: string;
+  /** 저장한 결과에서만 쓴다: 원문 문장은 저장하지 않았다는 표시 (PRD 7번: 자기소개서 원문은 저장하지 않는다) */
+  evidenceOmitted?: boolean;
+  /** 저장한 결과에서만 쓴다: 저장하기 전에 확인된 근거 문장의 개수 */
+  evidenceCount?: number;
 };
 
 export type BeiQuestion = {
