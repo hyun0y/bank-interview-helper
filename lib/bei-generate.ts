@@ -9,6 +9,7 @@ import "server-only";
 import { z } from "zod";
 import { AiError, callAiJson } from "@/lib/ai";
 import { checkAnswer, countAnswerChars, isAnswerLengthOk, type StarEvidenceInput } from "@/lib/answer-check";
+import { TARGET_CHARS, describeLengthFix, formatLengthFix, isTooLong, sentenceLengths, trimToRange } from "@/lib/answer-length";
 import { BEI_CRITERIA, buildCriteriaList, findBeiCriterion } from "@/lib/bei-criteria";
 import { STAR_LABELS, type AnswerCriterion, type BeiAnswer, type BeiQuestion, type StarPart } from "@/lib/bei-types";
 import { LIMITS } from "@/lib/limits";
@@ -18,6 +19,13 @@ export const FOLLOW_UPS_PER_QUESTION = 2;
 
 /** 이보다 짧은 원문은 사실이 부족해 300자 답변을 채우기 어렵다고 본다. */
 const SHORT_ORIGINAL_CHARS = 250;
+
+/** 길이를 맞추려고 AI에게 다시 쓰기를 맡기는 최대 횟수. 원문이 짧을수록 사실이 모자라 늘리기 어려우므로 줄인다. (CHECK.md 4번) */
+const MAX_LENGTH_ROUNDS = 3;
+/** 원문이 이보다 짧으면 사실이 너무 적어 다시 쓰기를 1회만 한다. (250자 미만은 최대 2회) */
+const VERY_SHORT_ORIGINAL_CHARS = 120;
+/** 이 시간(ms)이 지나면 새 다시 쓰기 회차를 시작하지 않는다. 요청 제한 시간(120초) 안에 끝내기 위한 것이다. */
+const LENGTH_FIX_BUDGET_MS = 70_000;
 
 function buildInstructions(originalChars: number): string {
   // 원문이 충분히 길면 길이를 반드시 맞추게 하고, 원문이 아주 짧을 때만 지어내지 않기 위해 짧은 채로 두는 것을 허용한다.
@@ -121,8 +129,9 @@ function lengthDistance(text: string): number {
 }
 
 /**
- * 길이가 범위를 벗어난 답변들을 한 번의 요청으로 다시 쓴다. (비용을 아끼려고 한 번만 시도한다)
- * 다시 쓴 결과가 오히려 더 멀어졌다면 처음 답변을 그대로 쓴다.
+ * 길이가 범위를 벗어난 답변들을 한 번의 요청으로 다시 쓴다. (한 회차)
+ * AI는 글자 수를 정확히 세지 못하므로, 각 초안의 "문장별 글자 수"와 "몇 자(문장 몇 개)를 더/덜"을 함께 알려 준다.
+ * 다시 쓴 결과가 오히려 더 멀어졌다면 이전 답변을 그대로 둔다.
  */
 async function rewriteForLength(
   original: string,
@@ -134,13 +143,14 @@ async function rewriteForLength(
     {
       instructions: [
         "너는 면접 모범 답변의 글자 수를 맞추는 도우미다.",
-        `자료의 '고칠 답변 초안'은 각각 ${LIMITS.ANSWER_MIN_CHARS}~${LIMITS.ANSWER_MAX_CHARS}자(띄어쓰기 포함, 목표 300자)여야 하는데 길이가 맞지 않는다. 각 초안의 length는 지금 글자 수이고, targetChars는 글자 수를 실제보다 적게 세는 경향을 감안해 이 글자 수 안팎으로 쓰라고 정한 목표다.`,
-        "초안마다 같은 index로 고쳐 쓴다. 줄여야 하면 덜 중요한 문장을 빼고, 늘려야 하면 '경험 원문'에 있는 사실을 서로 연결해 이유와 순서를 더 자세히 풀어 쓴다.",
+        `자료의 '고칠 답변 초안'은 각각 ${LIMITS.ANSWER_MIN_CHARS}~${LIMITS.ANSWER_MAX_CHARS}자(띄어쓰기 포함, 목표 ${TARGET_CHARS}자)여야 하는데 길이가 맞지 않는다.`,
+        "초안마다 length(지금 글자 수), sentenceLengths(문장별 글자 수), fix(몇 자를 더하거나 덜어야 하는지)를 준다. fix를 그대로 따른다. 글자 수를 직접 세려고 하지 말고 문장 단위로 늘리고 줄인다.",
+        "늘려야 하면 '경험 원문'에 있는 사실(시기·사람·횟수·방법·이유·결과)을 풀어서 문장을 추가하거나 기존 문장에 구체적인 내용을 덧붙인다. 줄여야 하면 덜 중요한 문장을 통째로 뺀다.",
+        "초안마다 같은 index로 고쳐 쓴다. 고친 뒤에도 상황→과제→행동→결과 순서와 1인칭 구어체 존댓말, 한 단락을 유지한다. 숫자 대신 '첫째', '둘째'처럼 쓴다.",
         "가장 중요한 규칙: '경험 원문'에 없는 사실·숫자·인물·성과·결과·배운 점·느낀 점은 절대 추가하지 않는다.",
         original.length >= SHORT_ORIGINAL_CHARS
-          ? "원문은 충분히 길다. 반드시 280자 이상 320자 이하로 만든다. 초안이 짧으면 원문에 적힌 세부 사실(시기·사람·횟수·방법·이유·결과)을 하나씩 빠짐없이 풀어서 넣는다. 초안과 같은 길이로 돌려주지 않는다."
+          ? "원문은 충분히 길다. 반드시 280자 이상 320자 이하로 만든다. 초안과 같은 길이로 돌려주지 않는다."
           : "원문이 짧아 사실이 부족하면 억지로 늘리지 않고 가능한 만큼만 고친다.",
-        "1인칭 구어체 존댓말, 상황→과제→행동→결과 순서, 한 단락을 유지한다. 숫자 대신 '첫째', '둘째'처럼 쓴다.",
         "evidence에는 상황(situation)·과제(task)·행동(action)·결과(result) 각각의 근거가 된 원문 문장을 원문에서 한 글자도 바꾸지 말고 그대로 복사한다. 원문에 그 내용이 없으면 빈 문자열로 두고 그 부분은 쓰지 않는다.",
         '출력은 {"answers":[{"index":0,"text":"","evidence":{"situation":"","task":"","action":"","result":""}}]} 모양의 JSON 하나뿐이다.',
       ].join("\n"),
@@ -149,18 +159,22 @@ async function rewriteForLength(
         {
           label: "고칠 답변 초안",
           text: JSON.stringify(
-            badIndexes.map((index) => ({
-              index,
-              question: questions[index].question,
-              length: countAnswerChars(drafts[index].text),
-              targetChars: countAnswerChars(drafts[index].text) < LIMITS.ANSWER_MIN_CHARS ? 335 : 290,
-              text: drafts[index].text,
-            })),
+            badIndexes.map((index) => {
+              const fix = describeLengthFix(drafts[index].text);
+              return {
+                index,
+                question: questions[index].question,
+                length: countAnswerChars(drafts[index].text),
+                sentenceLengths: sentenceLengths(drafts[index].text),
+                fix: fix ? formatLengthFix(fix) : "길이는 맞다. 그대로 둔다.",
+                text: drafts[index].text,
+              };
+            }),
           ),
         },
       ],
       userMessage: "초안을 길이에 맞게 고쳐 줘.",
-      maxOutputTokens: 8000,
+      maxOutputTokens: 6000,
       tier: "quality",
     },
     rewriteSchema,
@@ -178,6 +192,35 @@ async function rewriteForLength(
   }
   // 글자 수만 남긴다. (글 내용은 기록하지 않는다)
   console.warn(`[bei/generate] 길이 다시 쓰기 결과(글자 수): ${lengthLog.join(", ")}`);
+}
+
+/**
+ * 모든 답변을 280~320자에 가깝게 맞춘다. (CHECK.md 4번)
+ *  1) 너무 긴 답변은 AI를 부르지 않고 서버가 문장을 덜어내 맞춘다.
+ *  2) 그래도 범위 밖인 답변(주로 짧은 것)은 문장별 글자 수를 알려 주며 최대 3회까지 다시 쓰게 한다. 모자란 답변만 보낸다.
+ *  3) 마지막으로 길어진 답변은 한 번 더 문장을 덜어낸다.
+ * 끝내 맞추지 못한 답변은 그대로 두고 화면이 글자 수와 안내를 보여 준다. (없는 사실을 지어내 늘리지 않는다)
+ */
+async function fitAnswerLengths(original: string, questions: { question: string }[], drafts: Draft[], startedAt: number): Promise<void> {
+  const trimLong = () => {
+    for (const draft of drafts) if (isTooLong(draft.text)) draft.text = trimToRange(draft.text);
+  };
+  trimLong();
+
+  const maxRounds = original.length >= SHORT_ORIGINAL_CHARS ? MAX_LENGTH_ROUNDS : original.length >= VERY_SHORT_ORIGINAL_CHARS ? 2 : 1;
+  for (let round = 1; round <= maxRounds; round++) {
+    const badIndexes = drafts.flatMap((draft, index) => (isAnswerLengthOk(draft.text) ? [] : [index]));
+    if (badIndexes.length === 0) break;
+    if (Date.now() - startedAt > LENGTH_FIX_BUDGET_MS) break;
+    try {
+      await rewriteForLength(original, questions, drafts, badIndexes);
+    } catch (err) {
+      // 이전 답변을 그대로 쓴다. (글 내용은 기록하지 않고 실패 종류만 남긴다)
+      console.warn("[bei/generate] 길이 다시 쓰기에 실패해 이전 답변을 씁니다:", err instanceof AiError ? err.kind : "unknown");
+      break;
+    }
+    trimLong();
+  }
 }
 
 function cleanText(text: string): string {
@@ -239,6 +282,7 @@ function buildAnswer(
 
 /** 경험 원문 하나로 질문 5개, 꼬리 질문(질문마다 2개), 1분 모범 답변(질문마다 1개)을 만든다. */
 export async function generateQuestionsAndAnswers(experienceText: string): Promise<BeiQuestion[]> {
+  const startedAt = Date.now();
   const output = await callAiJson(
     {
       instructions: buildInstructions(experienceText.length),
@@ -255,16 +299,8 @@ export async function generateQuestionsAndAnswers(experienceText: string): Promi
   const items = output.questions.slice(0, QUESTIONS_PER_EXPERIENCE);
   const drafts: Draft[] = items.map((item) => ({ text: item.answer.text, evidence: item.answer.evidence ?? {} }));
 
-  // 길이가 280~320자를 벗어난 답변은 한 번만 다시 쓴다. 다시 쓰기가 실패해도 처음 답변으로 계속하고 글자 수를 표시한다.
-  const badIndexes = drafts.flatMap((draft, index) => (isAnswerLengthOk(draft.text) ? [] : [index]));
-  if (badIndexes.length > 0) {
-    try {
-      await rewriteForLength(experienceText, items, drafts, badIndexes);
-    } catch (err) {
-      // 처음 답변을 그대로 쓴다. (글 내용은 기록하지 않고 실패 종류만 남긴다)
-      console.warn("[bei/generate] 길이 다시 쓰기에 실패해 처음 답변을 씁니다:", err instanceof AiError ? err.kind : "unknown");
-    }
-  }
+  // 길이가 280~320자를 벗어난 답변을 맞춘다. (긴 것은 서버가 덜어내고, 짧은 것은 AI가 문장 단위로 늘린다. CHECK.md 4번)
+  await fitAnswerLengths(experienceText, items, drafts, startedAt);
 
   const questions = items.map((item, index): BeiQuestion => {
     // AI가 목록에 없는 기준을 말했다면 표시하지 않는다.
