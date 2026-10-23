@@ -48,3 +48,42 @@ export type ShortAnswer = {
   /** 계산 과정을 쉬운 말로 풀어 쓴 해설 */
   explanation: string;
 };
+
+/** 묶음 C 표의 한 칸(열) 설명 */
+export type ScheduleColumn = {
+  key: "date" | "time" | "title" | "place" | "attendees";
+  label: string;
+  /** 칸에 어떤 모양으로 쓰는지 안내 */
+  format: string;
+};
+
+/** 묶음 C 문제 — 서술형(일정표 작성). 정답이 없어서 브라우저로 내려보내도 되는 부분 */
+export type ScheduleQuestion = {
+  id: string;
+  prompt: string;
+  columns: ScheduleColumn[];
+};
+
+/** 묶음 C 정답 일정표의 한 줄 */
+export type ScheduleAnswerRow = {
+  /** YYYY-MM-DD */
+  date: string;
+  /** 24시간 "HH:MM-HH:MM" (한국 시간) */
+  time: string;
+  /** 정답 제목과, 함께 인정하는 다른 표현들 (띄어쓰기·기호는 비교할 때 무시) */
+  titles: string[];
+  /** 장소/형식. 칸이 채워졌는지만 보고 점수에는 넣지 않는다. */
+  place: string;
+  /** 참석자/대상. 칸이 채워졌는지만 보고 점수에는 넣지 않는다. */
+  attendees: string;
+  /** 이 줄이 이렇게 정해진 이유 (해설) */
+  reason: string;
+};
+
+/** 묶음 C 정답·해설 — 서버에서만 읽는다. */
+export type ScheduleAnswer = {
+  id: string;
+  rows: ScheduleAnswerRow[];
+  /** 일정표에 넣지 않는 항목과 그 이유 (해설) */
+  excluded: string[];
+};
