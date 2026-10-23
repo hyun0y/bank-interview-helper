@@ -3,15 +3,18 @@
 // 표 형식 검사("형식 오류" 안내)는 제출·채점을 만드는 19번에서 붙인다.
 import type { ScheduleColumn } from "@/lib/literacy-types";
 import { emptyScheduleRow, type ScheduleRowInput } from "@/lib/literacy-exam";
+import { describeFormatError, type ScheduleFormatError } from "@/lib/schedule-format";
 
 type Props = {
   columns: ScheduleColumn[];
   rows: ScheduleRowInput[];
   onChange: (rows: ScheduleRowInput[]) => void;
   disabled?: boolean;
+  /** 제출 전 형식 검사에서 나온 오류. 해당 칸을 빨갛게 표시한다. */
+  errors?: ScheduleFormatError[];
 };
 
-export default function ScheduleEditor({ columns, rows, onChange, disabled = false }: Props) {
+export default function ScheduleEditor({ columns, rows, onChange, disabled = false, errors = [] }: Props) {
   function setCell(rowIndex: number, key: ScheduleColumn["key"], value: string) {
     onChange(rows.map((row, i) => (i === rowIndex ? { ...row, [key]: value } : row)));
   }
@@ -48,8 +51,9 @@ export default function ScheduleEditor({ columns, rows, onChange, disabled = fal
                       value={row[column.key]}
                       onChange={(e) => setCell(rowIndex, column.key, e.target.value)}
                       disabled={disabled}
+                      aria-invalid={errors.some((e) => e.row === rowIndex && e.column === column.key) || undefined}
                       placeholder={column.key === "date" ? "2025-11-05" : column.key === "time" ? "08:30-09:30" : ""}
-                      className="w-full rounded-md border border-zinc-400 bg-transparent px-2 py-1.5 disabled:opacity-50"
+                      className="w-full rounded-md border border-zinc-400 bg-transparent px-2 py-1.5 disabled:opacity-50 aria-[invalid=true]:border-red-500 aria-[invalid=true]:bg-red-50 dark:aria-[invalid=true]:bg-red-950"
                     />
                   </td>
                 ))}
@@ -69,6 +73,16 @@ export default function ScheduleEditor({ columns, rows, onChange, disabled = fal
           </tbody>
         </table>
       </div>
+      {errors.length > 0 && (
+        <div data-testid="schedule-errors" role="alert" className="rounded-md border border-red-400 px-3 py-2 text-xs leading-5 text-red-700 dark:text-red-300">
+          <p className="font-bold">형식 오류 {errors.length}건 · 고친 뒤 다시 제출해 주세요.</p>
+          <ul className="mt-1 list-disc pl-4">
+            {errors.map((error, i) => (
+              <li key={i}>{describeFormatError(error)}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
