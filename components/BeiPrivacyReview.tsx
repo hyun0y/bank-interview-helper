@@ -32,7 +32,8 @@ type Props = {
   findError: string | null;
 };
 
-const KINDS: PersonalInfoKind[] = ["phone", "email", "resident-id"];
+// 자동으로 가린 건수를 이 순서로 보여 준다. (생년월일·계좌/카드번호도 몇 건 가렸는지 함께 안내)
+const KINDS: PersonalInfoKind[] = ["phone", "email", "resident-id", "birth-date", "account"];
 
 function describeCounts(counts: PersonalInfoCounts): string {
   const parts = KINDS.filter((kind) => counts[kind] > 0).map((kind) => `${PERSONAL_INFO_LABELS[kind]} ${counts[kind]}건`);
@@ -73,7 +74,7 @@ export default function BeiPrivacyReview({ value, onChange, autoCounts, onReset,
         <div className="rounded-md border border-zinc-300 bg-zinc-50 p-4 text-sm leading-6 dark:border-zinc-700 dark:bg-zinc-900">
           <p className="font-medium">개인정보는 가리고 올려 주세요. 이름·학교명은 직접 가려 주세요.</p>
           <p className="mt-1 text-zinc-600 dark:text-zinc-300">
-            연락처·주민등록번호·이메일은 자동으로 가렸습니다. 이름·학교명처럼 자동으로 찾기 어려운 정보는 아래에서 직접 가릴 수
+            연락처·주민등록번호·이메일·카드번호는 자동으로 가렸고, &quot;생년월일&quot;·&quot;계좌&quot;라고 적은 뒤의 날짜·번호도 가렸습니다. 이름·학교명처럼 자동으로 찾기 어려운 정보는 아래에서 직접 가릴 수
             있습니다. 이 단계의 글은 아직 AI로 보내지 않았습니다.
           </p>
         </div>
