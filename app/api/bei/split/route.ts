@@ -2,6 +2,7 @@
 // 순서: ① 요청 상한 확인 → ② 입력 검사 → ③ 처리 → ④ 응답 모양 확인 (DESIGN §4)
 import { z } from "zod";
 import { aiErrorResponse } from "@/lib/ai";
+import { withCostAccounting } from "@/lib/ai-billing";
 import { readJsonBody } from "@/lib/api-input";
 import type { SplitResponse } from "@/lib/bei-types";
 import { findExperienceCandidates } from "@/lib/bei-split";
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
   const masked = maskPersonalInfo(body.data.text).text;
 
   try {
-    const candidates = await findExperienceCandidates(masked); // ③ 처리
+    const candidates = await withCostAccounting(request, () => findExperienceCandidates(masked)); // ③ 처리 (모델을 여러 번 부르면 그만큼 상한에 더한다)
     const response: SplitResponse = { candidates }; // ④ 응답
     return Response.json(response);
   } catch (err) {

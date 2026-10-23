@@ -3,6 +3,7 @@
 // 질문 횟수·토큰은 브라우저가 차감한다. 이 API가 실패하면(charged:false) 차감하지 않는다.
 import { z } from "zod";
 import { aiErrorResponse } from "@/lib/ai";
+import { withCostAccounting } from "@/lib/ai-billing";
 import { questionSchema, readJsonBody } from "@/lib/api-input";
 import { answerAssistQuestion, ASSIST_HISTORY_MAX_CHARS, ASSIST_HISTORY_MAX_MESSAGES, ASSIST_MAX_FILES, resolveOpenedFiles } from "@/lib/literacy-assist";
 import { enforceRateLimit } from "@/lib/rate-limit";
@@ -30,12 +31,14 @@ export async function POST(request: Request) {
   }
 
   try {
-    const answer = await answerAssistQuestion({
-      bundle: body.data.bundle,
-      question: body.data.question,
-      materials: files.materials,
-      history: body.data.history,
-    }); // ④ AI 호출
+    const answer = await withCostAccounting(request, () =>
+      answerAssistQuestion({
+        bundle: body.data.bundle,
+        question: body.data.question,
+        materials: files.materials,
+        history: body.data.history,
+      }),
+    ); // ④ AI 호출
     return Response.json({ answer, referencedFiles: files.names }); // ⑤ 응답
   } catch (err) {
     return aiErrorResponse(err);
