@@ -1,6 +1,6 @@
 // Design Ref: §2.1 화면 지도 `/bei` — BEI 입력. (작업 6번: ① 내용 넣기)
 import type { Metadata } from "next";
-import BeiInput from "@/components/BeiInput";
+import BeiFlow from "@/components/BeiFlow";
 
 export const metadata: Metadata = {
   title: "BEI 면접 | 은행 면접도우미 A to Z",
@@ -15,7 +15,7 @@ export default function BeiPage() {
           자기소개서나 경험을 넣으면, 그 경험에 맞는 질문과 꼬리 질문, 1분 모범 답변을 만들어 드립니다.
         </p>
       </div>
-      <BeiInput />
+      <BeiFlow />
     </main>
   );
 }
