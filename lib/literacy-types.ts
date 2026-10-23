@@ -87,3 +87,38 @@ export type ScheduleAnswer = {
   /** 일정표에 넣지 않는 항목과 그 이유 (해설) */
   excluded: string[];
 };
+
+// ---- 브라우저로 내려가는 "문제 세트" 모양 (정답은 절대 넣지 않는다) ----
+
+export type BundleId = "A" | "B" | "C";
+
+/** 파일 목록에 보이는 정보. 내용은 처음 열 때 따로 받는다. */
+export type PublicFile = { id: string; name: string; tokens: number };
+
+export type PublicBundle = {
+  id: BundleId;
+  title: string;
+  description: string;
+  /** 문제 하나당 배점 */
+  points: number;
+  files: PublicFile[];
+};
+
+export type PublicQuestion = {
+  /** 시험 전체에서의 번호 (1~10) */
+  number: number;
+  bundle: BundleId;
+  id: string;
+  kind: "short" | "ox" | "schedule";
+  points: number;
+  prompt: string;
+  /** 단답형: 답을 쓰는 모양 안내 */
+  format?: string;
+  /** 서술형: 표의 칸 설명 */
+  columns?: ScheduleColumn[];
+};
+
+export type LiteracySet = {
+  bundles: PublicBundle[];
+  questions: PublicQuestion[];
+};
