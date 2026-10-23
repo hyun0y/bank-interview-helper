@@ -9,6 +9,7 @@ import { findExperienceCandidates } from "@/lib/bei-split";
 import { LIMITS } from "@/lib/limits";
 import { maskPersonalInfo } from "@/lib/masking";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { enforceSameSite } from "@/lib/request-guard";
 
 const bodySchema = z.object({
   text: z
@@ -19,6 +20,10 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: Request) {
+  // 다른 사이트가 방문자 브라우저로 이 주소를 대신 부르는 것을 먼저 막는다. (요청 상한도 쓰지 않게 가장 앞에서)
+  const crossSite = enforceSameSite(request);
+  if (crossSite) return crossSite;
+
   const limited = enforceRateLimit(request); // ① 요청 상한 (AI 호출 전에 센다)
   if (limited) return limited;
 
