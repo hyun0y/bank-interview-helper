@@ -119,7 +119,17 @@ function QuestionList({ questions, speech }: { questions: BeiQuestion[]; speech:
                     <SpeakButton speech={speech} speakKey={`f-${question.id}-${followIndex}`} text={followUp.question} label={`꼬리 질문 ${index + 1}-${followIndex + 1}`} />
                   </div>
                   <p className="mt-0.5 text-zinc-600 dark:text-zinc-300">
-                    <span className="font-medium">답변 방향</span> {followUp.answerDirection}
+                    {/* AI가 답변 방향 칸에 "보완 필요" 문구를 그대로 쓰는 경우가 있어, 아래 배지와 겹치지 않게 문구를 뺀다. */}
+                    {(() => {
+                      const direction = followUp.missingInfo
+                        ? followUp.answerDirection.replaceAll("경험에서 확인되지 않음, 보완 필요", "").replace(/^[\s,.·-]+|[\s,.·-]+$/g, "")
+                        : followUp.answerDirection;
+                      return direction ? (
+                        <>
+                          <span className="font-medium">답변 방향</span> {direction}
+                        </>
+                      ) : null;
+                    })()}
                     {followUp.missingInfo && (
                       <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-900 dark:text-amber-100">
                         경험에서 확인되지 않음, 보완 필요
