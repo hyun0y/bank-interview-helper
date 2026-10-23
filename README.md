@@ -1,36 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 은행 면접도우미 A to Z
 
-## Getting Started
+은행·금융권 면접을 준비하는 사람을 위한 연습 웹 앱입니다. 시작 화면에서 **BEI 면접 / AI 리터러시 면접 / 토론 면접** 중 준비할 것을 골라 따로 연습합니다.
+로그인이 없고 서버에 저장하는 것도 없습니다. 결과는 사용자의 브라우저에만 저장됩니다.
 
-First, run the development server:
+## 주요 기능
+
+| 영역 | 하는 일 |
+|---|---|
+| **BEI 면접** | 자기소개서·경험을 붙여 넣으면 경험 후보를 찾고, 고른 경험마다 질문 5개(꼬리 질문 2개씩)와 280~320자 STAR 모범 답변을 만듭니다. 올린 내용에 없는 사실은 지어내지 않고, 근거를 확인하지 못한 답변은 "근거 확인 안 됨"으로 표시합니다. 연락처·주민번호·이메일 등은 AI에 보내기 전에 가리고 확인 화면을 거칩니다. |
+| **AI 리터러시 면접** | 가상 자료로 만든 모의 시험(문제 10개, 100점 만점)을 풉니다. 묶음마다 토큰 20,000·질문 10회 한도 안에서 AI 어시스트에 물어볼 수 있고, 제출하면 채점과 해설을 보여 줍니다. 정답은 서버에서만 다룹니다. |
+| **토론 면접** | 주제 17개 중 하나를 고르고 입장을 정하면, 1분 이내에 찬성·반대 의견과 새로운 관점을 만들어 줍니다. 질문 읽어 주기(음성) 기능이 있습니다. |
+
+모든 문제와 자료는 가상으로 만든 것이며 실제 시험 자료가 아닙니다.
+
+## 기술 스택
+
+- Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4
+- OpenAI API (서버 쪽 코드에서만 호출)
+- 배포: Vercel
+
+## 보안·개인정보
+
+- API 키는 서버에서만 읽고 브라우저로 내려보내지 않습니다.
+- AI를 부르는 서버 주소는 같은 사이트의 요청만 받고, 접속 주소별 요청 수 상한(1시간 100회, 어시스트 질문은 별도 40회)과 입력 길이 상한이 있습니다.
+- 자기소개서 원본은 서버에 저장하지 않으며, 서버 로그에도 내용을 남기지 않습니다.
+
+## 직접 실행하기
+
+```bash
+npm install
+```
+
+프로젝트 폴더에 `.env` 파일을 만들고 OpenAI 키를 넣습니다. (이 파일은 Git에 올라가지 않습니다)
+
+```
+OPENAI_API_KEY=여기에_본인_키
+```
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+브라우저에서 http://localhost:3000 을 엽니다. 확인용 명령은 `npm run lint`, `npm run build`입니다.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 문서
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [PRD.md](PRD.md): 무엇을 만들지 정한 기획서
+- [PLAN.md](PLAN.md): 만드는 순서와 성공 기준
+- [DESIGN.md](DESIGN.md): 화면·구조 설계
+- [CHECK.md](CHECK.md): 설계 대비 점검과 보안 점검 결과
+- [DEPLOY.md](DEPLOY.md): 배포 준비와 환경 변수 안내
