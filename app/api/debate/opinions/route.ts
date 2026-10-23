@@ -8,6 +8,7 @@ import { readJsonBody } from "@/lib/api-input";
 import { generateOpinions } from "@/lib/debate-opinions";
 import { DEBATE_TOPICS } from "@/content/debate/topics";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { enforceSameSite } from "@/lib/request-guard";
 
 const bodySchema = z.object({
   topicId: z.string("주제 번호를 보내 주세요.").trim().min(1, "주제 번호를 보내 주세요.").max(20, "주제 번호가 올바르지 않습니다."),
@@ -15,6 +16,10 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: Request) {
+  // 다른 사이트가 방문자 브라우저로 이 주소를 대신 부르는 것을 먼저 막는다. (요청 상한도 쓰지 않게 가장 앞에서)
+  const crossSite = enforceSameSite(request);
+  if (crossSite) return crossSite;
+
   const limited = enforceRateLimit(request); // ① 요청 상한 (AI 호출 전에 센다)
   if (limited) return limited;
 

@@ -7,6 +7,7 @@ import { withCostAccounting } from "@/lib/ai-billing";
 import { questionSchema, readJsonBody } from "@/lib/api-input";
 import { answerAssistQuestion, ASSIST_HISTORY_MAX_CHARS, ASSIST_HISTORY_MAX_MESSAGES, ASSIST_MAX_FILES, resolveOpenedFiles } from "@/lib/literacy-assist";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { enforceSameSite } from "@/lib/request-guard";
 
 const bodySchema = z.object({
   bundle: z.enum(["A", "B", "C"], "묶음 번호가 올바르지 않습니다."),
@@ -18,6 +19,10 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: Request) {
+  // 다른 사이트가 방문자 브라우저로 이 주소를 대신 부르는 것을 먼저 막는다. (요청 상한도 쓰지 않게 가장 앞에서)
+  const crossSite = enforceSameSite(request);
+  if (crossSite) return crossSite;
+
   const limited = enforceRateLimit(request); // ① 요청 상한 (AI 호출 전에 센다)
   if (limited) return limited;
 
