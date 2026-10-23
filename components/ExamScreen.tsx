@@ -68,6 +68,8 @@ function OxButtons({ question, value, onChange, disabled }: { question: PublicQu
 
 export default function ExamScreen() {
   const [load, setLoad] = useState<LoadState>({ status: "loading" });
+  // [다시 불러오기]를 누를 때마다 올려서, 문제 세트를 처음부터 다시 받아 온다. (불러오기 실패 때 막다른 길이 되지 않게)
+  const [loadAttempt, setLoadAttempt] = useState(0);
   // 시험 상태(답·한도·열어 본 파일·대화)는 이 브라우저에 저장해 두고, 새로고침해도 이어서 한다. (작업 18번)
   const [stored, save] = useStoredValue<ExamState>(STORAGE_KEYS.examState, isExamState);
   const tab = useExamTabLock();
@@ -96,7 +98,7 @@ export default function ExamScreen() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadAttempt]);
 
   if (load.status === "loading") {
     return (
@@ -107,9 +109,21 @@ export default function ExamScreen() {
   }
   if (load.status === "error") {
     return (
-      <p role="alert" data-testid="exam-load-error" className="text-sm font-medium text-red-600">
-        {load.message}
-      </p>
+      <div role="alert" data-testid="exam-load-error" className="flex flex-col items-start gap-3 rounded-md border border-red-300 p-4 text-sm dark:border-red-700">
+        <p className="font-medium text-red-600">{load.message}</p>
+        <p className="text-zinc-600 dark:text-zinc-300">인터넷 연결을 확인한 뒤 다시 불러와 주세요. 입력해 둔 답은 이 브라우저에 그대로 있습니다.</p>
+        <button
+          type="button"
+          data-testid="exam-load-retry"
+          onClick={() => {
+            setLoad({ status: "loading" });
+            setLoadAttempt((n) => n + 1);
+          }}
+          className="rounded-md border border-zinc-400 px-4 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+        >
+          다시 불러오기
+        </button>
+      </div>
     );
   }
 
