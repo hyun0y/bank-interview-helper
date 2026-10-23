@@ -3,6 +3,7 @@
 // 순서: ① 요청 상한 확인 → ② 입력 검사 → ③ 처리 → ④ 응답 모양 확인
 import { z } from "zod";
 import { aiErrorResponse } from "@/lib/ai";
+import { withCostAccounting } from "@/lib/ai-billing";
 import { readJsonBody } from "@/lib/api-input";
 import { generateQuestionsAndAnswers } from "@/lib/bei-generate";
 import type { GenerateResponse } from "@/lib/bei-types";
@@ -33,7 +34,8 @@ export async function POST(request: Request) {
   const masked = maskPersonalInfo(body.data.excerpt).text;
 
   try {
-    const questions = await generateQuestionsAndAnswers(masked); // ③ 처리
+    // ③ 처리: 형식 재시도·길이 다시 쓰기로 모델을 여러 번 부르면 그만큼 요청 상한에 더한다.
+    const questions = await withCostAccounting(request, () => generateQuestionsAndAnswers(masked));
     const response: GenerateResponse = { questions }; // ④ 응답
     return Response.json(response);
   } catch (err) {

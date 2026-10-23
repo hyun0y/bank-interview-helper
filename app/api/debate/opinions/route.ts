@@ -3,6 +3,7 @@
 // 주제 글은 브라우저가 보낸 것이 아니라 서버 목록에서 찾는다. 결과는 저장하지 않고 로그에도 남기지 않는다.
 import { z } from "zod";
 import { aiErrorResponse } from "@/lib/ai";
+import { withCostAccounting } from "@/lib/ai-billing";
 import { readJsonBody } from "@/lib/api-input";
 import { generateOpinions } from "@/lib/debate-opinions";
 import { DEBATE_TOPICS } from "@/content/debate/topics";
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
   if (!topic) return Response.json({ error: { code: "not_found", message: "없는 주제입니다." }, charged: false }, { status: 404 });
 
   try {
-    return Response.json(await generateOpinions(topic, body.data.stance)); // ④⑤ AI 호출과 응답 모양 확인
+    return Response.json(await withCostAccounting(request, () => generateOpinions(topic, body.data.stance))); // ④⑤ AI 호출과 응답 모양 확인
   } catch (err) {
     return aiErrorResponse(err);
   }

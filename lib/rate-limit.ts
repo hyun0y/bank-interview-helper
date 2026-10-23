@@ -3,6 +3,7 @@
 //   (정확한 비용 보호는 OpenAI 계정의 월 사용 금액 한도가 맡는다.)
 // Plan SC: AI를 부르는 요청만 세어 접속 주소별 1시간 100회, 한도를 넘으면 안내한다. 실패한 요청도 센다.
 import "server-only";
+import { normalizeClientAddress } from "@/lib/client-id";
 import { LIMITS } from "@/lib/limits";
 
 type RateLimitConfig = { max: number; windowMs: number };
@@ -30,10 +31,13 @@ const MAX_TRACKED_CLIENTS = 10_000;
 const globalForLimit = globalThis as unknown as { __aiRateLimitHits?: Map<string, number[]> };
 const hits: Map<string, number[]> = (globalForLimit.__aiRateLimitHits ??= new Map());
 
-/** 접속 주소를 알아낸다. Vercel 같은 배포 환경은 x-forwarded-for 맨 앞 값이 실제 접속 주소다. */
+/**
+ * 접속 주소를 알아낸다. Vercel 같은 배포 환경은 x-forwarded-for 맨 앞 값이 실제 접속 주소다.
+ * IPv6는 같은 /64 안의 주소를 한 사용자로 묶는다. (주소만 바꿔 상한을 피하지 못하게, CHECK.md 1번)
+ */
 export function getClientId(request: Request): string {
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || request.headers.get("x-real-ip")?.trim() || "unknown";
+  return normalizeClientAddress(forwarded || request.headers.get("x-real-ip")?.trim() || "unknown");
 }
 
 export type RateLimitResult =
@@ -72,6 +76,25 @@ export function consumeRateLimit(clientId: string, now: number = Date.now()): Ra
   hits.set(clientId, times);
   if (hits.size > MAX_TRACKED_CLIENTS) sweep(now, windowMs);
   return { allowed: true, limit: max, remaining: max - times.length };
+}
+
+/** 한 요청이 몇 번까지 추가로 셀 수 있는지의 상한. (이상한 값이 와도 기록이 끝없이 늘지 않게) */
+const MAX_EXTRA_COST = 10;
+
+/**
+ * 이미 센 요청 1건에 더해, AI를 추가로 부른 만큼 더 센다. 한도를 넘어도 거절하지 않고 기록만 한다.
+ * (이미 처리를 마친 요청이므로, 다음 요청부터 한도가 줄어든 것으로 적용된다)
+ */
+export function addRateLimitCost(clientId: string, extra: number, now: number = Date.now()): void {
+  const count = Math.min(MAX_EXTRA_COST, Math.max(0, Math.floor(extra)));
+  if (count === 0) return;
+  const { windowMs } = getRateLimitConfig();
+  const times = hits.get(clientId) ?? [];
+  while (times.length > 0 && times[0] <= now - windowMs) times.shift();
+  for (let i = 0; i < count; i++) times.push(now);
+  hits.delete(clientId);
+  hits.set(clientId, times);
+  if (hits.size > MAX_TRACKED_CLIENTS) sweep(now, windowMs);
 }
 
 function describeWait(seconds: number): string {

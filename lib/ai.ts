@@ -2,6 +2,7 @@
 // Design Ref: §8 보안 — OPENAI_API_KEY는 서버에서만 읽고, 올린 내용은 자료로만 다룬다.
 // Plan SC: 실패하면 차감 없이 재시도할 수 있도록 실패를 구분해서 알려 준다. (차감은 화면 쪽에서 성공했을 때만 한다)
 import "server-only";
+import { AsyncLocalStorage } from "node:async_hooks";
 import OpenAI from "openai";
 import type { ZodType } from "zod";
 
@@ -111,6 +112,22 @@ export type AiRequest = {
   tier?: ModelTier;
 };
 
+// 한 요청 안에서 AI 모델을 몇 번 불렀는지 센다. (요청 상한이 "요청 1건 = AI 1번"이 아니라 실제 호출 수를 반영하도록, CHECK.md 1번)
+const callCounter = new AsyncLocalStorage<{ calls: number }>();
+
+/**
+ * fn 안에서 일어난 AI 모델 호출 수를 센다. 끝나면(실패해도) onDone에 호출 수를 알려 준다.
+ * 형식 재시도·길이 다시 쓰기처럼 한 요청이 모델을 여러 번 부르는 경우에도 비용을 정확히 상한에 반영하려는 것이다.
+ */
+export async function countAiCalls<T>(fn: () => Promise<T>, onDone: (calls: number) => void): Promise<T> {
+  const counter = { calls: 0 };
+  try {
+    return await callCounter.run(counter, fn);
+  } finally {
+    onDone(counter.calls);
+  }
+}
+
 let cachedClient: OpenAI | undefined;
 
 function getClient(): OpenAI {
@@ -139,6 +156,8 @@ function buildMessages(req: AiRequest, forceJson: boolean) {
 
 async function complete(req: AiRequest, forceJson: boolean): Promise<string> {
   const client = getClient();
+  const counter = callCounter.getStore();
+  if (counter) counter.calls += 1;
   try {
     const completion = await client.chat.completions.create({
       model: getModel(req.tier),
