@@ -18,7 +18,7 @@ export const AREAS: Area[] = [
     title: "BEI 면접",
     subtitle: "경험 맞춤",
     description: "자기소개서·경험을 넣으면 질문과 꼬리 질문, 1분 모범 답변을 만들어 줍니다.",
-    ready: false,
+    ready: true,
   },
   {
     id: "literacy",
