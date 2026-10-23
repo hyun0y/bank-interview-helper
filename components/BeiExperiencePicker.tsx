@@ -11,9 +11,13 @@ type Props = {
   onToggle: (id: string) => void;
   /** ②로 돌아가기 */
   onBack: () => void;
+  /** [질문 만들기] — 고른 경험마다 질문·꼬리 질문을 만든다 */
+  onGenerate: () => void;
+  /** 질문을 만들 수 없을 때(예: 동의 거부) 보여 줄 안내 */
+  notice: string | null;
 };
 
-export default function BeiExperiencePicker({ candidates, selected, onToggle, onBack }: Props) {
+export default function BeiExperiencePicker({ candidates, selected, onToggle, onBack, onGenerate, notice }: Props) {
   const full = selected.length >= LIMITS.BEI_MAX_SELECTED;
 
   return (
@@ -90,14 +94,24 @@ export default function BeiExperiencePicker({ candidates, selected, onToggle, on
           </button>
           <button
             type="button"
-            disabled
+            disabled={selected.length === 0}
+            onClick={onGenerate}
             data-testid="pick-next"
-            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
           >
-            질문·답변 만들기
+            질문 만들기
           </button>
         </div>
-        <p className="text-sm text-zinc-600 dark:text-zinc-300">질문·꼬리 질문과 모범 답변 만들기는 다음 작업에서 이어서 만들어집니다.</p>
+        <p className="text-sm text-zinc-600 dark:text-zinc-300">
+          {selected.length === 0
+            ? "경험을 하나 이상 골라 주세요."
+            : `고른 경험 ${selected.length}개마다 AI가 질문 5개와 꼬리 질문을 만듭니다. (경험 1개당 AI 요청 1회) 모범 답변은 다음 작업에서 이어서 만들어집니다.`}
+        </p>
+        {notice && (
+          <p data-testid="pick-notice" role="alert" className="text-sm font-medium text-red-600">
+            {notice}
+          </p>
+        )}
       </section>
     </div>
   );

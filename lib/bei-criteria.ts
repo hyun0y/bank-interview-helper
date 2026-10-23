@@ -215,6 +215,13 @@ export const BEI_CRITERIA_SOURCES = [
 // ---------------------------------------------------------------------------
 
 /**
+ * 평가 기준 번호(id)와 이름·설명만 한 줄씩 담은 짧은 목록 글을 만든다. (질문을 만들 때 "이 질문이 확인하려는 기준"을 고르게 하는 용도)
+ */
+export function buildCriteriaList(): string {
+  return BEI_CRITERIA.map((criterion) => `- ${criterion.id} (${criterion.name}): ${criterion.summary}`).join("\n");
+}
+
+/**
  * AI가 모범 답변을 만들 때 참고할 평가 기준 목록 글을 만든다. (개발자가 쓴 지침이므로 안전하게 그대로 넣는다)
  * 답변마다 이 중 관련 있는 기준의 번호(id)를 골라 돌려주게 하면 "반영한 평가 기준" 표시를 만들 수 있다.
  */
