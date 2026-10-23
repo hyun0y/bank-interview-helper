@@ -45,6 +45,19 @@ export function sliceByQuotes(original: string, startQuote: string, endQuote: st
   return { start: from, end: to, text };
 }
 
+/**
+ * 원문 안에서 어떤 문장(근거 문장)을 찾아, 원문에 적힌 그대로의 글을 돌려준다. 찾지 못하거나 너무 짧으면 null
+ * - 띄어쓰기·줄바꿈이 조금 달라도 같은 곳으로 본다.
+ * - 너무 짧은 문장(기본 8글자 미만)은 우연히 맞을 수 있어 근거로 인정하지 않는다.
+ */
+export function findQuote(original: string, quote: string, minChars = 8): string | null {
+  if (quote.replace(/\s+/g, "").length < minChars) return null;
+  const pattern = tolerantPattern(quote);
+  if (!pattern) return null;
+  const match = pattern.exec(original);
+  return match ? match[0] : null;
+}
+
 /** 서로 크게 겹치는 구간은 앞의 것만 남긴다. (겹침이 짧은 쪽의 절반을 넘으면 같은 경험으로 본다) */
 export function dropOverlaps<T extends { span: Span }>(items: T[]): T[] {
   const sorted = [...items].sort((a, b) => a.span.start - b.span.start);

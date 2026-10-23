@@ -1,10 +1,10 @@
-// Design Ref: §4 서버 API 설계 `/api/bei/generate` — 고른 경험 1개의 원문을 받아 질문 5개와 꼬리 질문(질문마다 2개)을 돌려준다.
+// Design Ref: §4 서버 API 설계 `/api/bei/generate` — 고른 경험 1개의 원문을 받아 질문 5개, 꼬리 질문(질문마다 2개), 1분 모범 답변을 돌려준다.
 // 경험이 여러 개면 화면이 경험마다 한 번씩, 동시에 부른다. (3분 이내 목표와 서버 실행 시간 한도를 지키기 위함: DESIGN §7)
 // 순서: ① 요청 상한 확인 → ② 입력 검사 → ③ 처리 → ④ 응답 모양 확인
 import { z } from "zod";
 import { aiErrorResponse } from "@/lib/ai";
 import { readJsonBody } from "@/lib/api-input";
-import { generateQuestions } from "@/lib/bei-questions";
+import { generateQuestionsAndAnswers } from "@/lib/bei-generate";
 import type { GenerateResponse } from "@/lib/bei-types";
 import { MIN_EXCERPT_CHARS } from "@/lib/excerpt";
 import { LIMITS } from "@/lib/limits";
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
   const masked = maskPersonalInfo(body.data.excerpt).text;
 
   try {
-    const questions = await generateQuestions(masked); // ③ 처리
+    const questions = await generateQuestionsAndAnswers(masked); // ③ 처리
     const response: GenerateResponse = { questions }; // ④ 응답
     return Response.json(response);
   } catch (err) {

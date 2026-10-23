@@ -12,7 +12,17 @@ import type { ZodType } from "zod";
  */
 export const DEFAULT_MODEL = "gpt-5.4-mini";
 
-export function getModel(): string {
+/**
+ * 품질 모델: 모범 답변처럼 글자 수와 사실 확인을 정확히 지켜야 하는 작업에 쓴다.
+ * 점검해 보니 빠른 모델은 답변 글자 수를 280~320자에 맞추지 못했고(평균 약 200자), 이 모델은 5개 모두 맞췄다.
+ * 환경 변수 OPENAI_MODEL_QUALITY가 있으면 그 값을 우선한다.
+ */
+export const DEFAULT_QUALITY_MODEL = "gpt-5.4";
+
+export type ModelTier = "fast" | "quality";
+
+export function getModel(tier: ModelTier = "fast"): string {
+  if (tier === "quality") return process.env.OPENAI_MODEL_QUALITY?.trim() || DEFAULT_QUALITY_MODEL;
   return process.env.OPENAI_MODEL?.trim() || DEFAULT_MODEL;
 }
 
@@ -97,6 +107,8 @@ export type AiRequest = {
   history?: { role: "user" | "assistant"; content: string }[];
   /** 출력 토큰 상한. 비우면 모델 기본값 */
   maxOutputTokens?: number;
+  /** 어떤 모델을 쓸지. 기본은 빠르고 저렴한 모델(fast), 정확해야 하는 작업만 quality */
+  tier?: ModelTier;
 };
 
 let cachedClient: OpenAI | undefined;
@@ -129,7 +141,7 @@ async function complete(req: AiRequest, forceJson: boolean): Promise<string> {
   const client = getClient();
   try {
     const completion = await client.chat.completions.create({
-      model: getModel(),
+      model: getModel(req.tier),
       messages: buildMessages(req, forceJson),
       ...(forceJson ? { response_format: { type: "json_object" as const } } : {}),
       ...(req.maxOutputTokens ? { max_completion_tokens: req.maxOutputTokens } : {}),
@@ -157,8 +169,13 @@ export async function callAiJson<T>(req: AiRequest, schema: ZodType<T>): Promise
     try {
       const parsed = schema.safeParse(JSON.parse(text));
       if (parsed.success) return parsed.data;
+      // 어느 칸이 약속과 달랐는지만 남긴다. (사용자 글이나 AI 답변 내용은 기록하지 않는다)
+      console.warn(
+        `[ai] 답변 형식 검사 실패(${attempt + 1}/2):`,
+        parsed.error.issues.slice(0, 5).map((issue) => `${issue.path.join(".")}:${issue.code}`).join(", "),
+      );
     } catch {
-      // JSON이 아니면 아래에서 다시 시도한다.
+      console.warn(`[ai] 답변이 JSON이 아니어서 다시 시도합니다(${attempt + 1}/2). 글자 수: ${text.length}`);
     }
   }
   throw new AiError("bad_output", "AI 답변의 형식이 올바르지 않습니다. 다시 시도해 주세요.", true);
