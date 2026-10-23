@@ -165,8 +165,11 @@ async function complete(req: AiRequest, forceJson: boolean): Promise<string> {
       ...(forceJson ? { response_format: { type: "json_object" as const } } : {}),
       ...(req.maxOutputTokens ? { max_completion_tokens: req.maxOutputTokens } : {}),
     });
-    const text = completion.choices[0]?.message?.content?.trim();
+    const choice = completion.choices[0];
+    const text = choice?.message?.content?.trim();
     if (!text) throw new AiError("bad_output", "AI가 답을 만들지 못했습니다. 다시 시도해 주세요.", true);
+    // 글로 받는 답변이 출력 토큰 상한에 걸려 잘렸으면 사용자가 알 수 있게 덧붙인다. (JSON은 잘리면 형식 검사에서 걸러진다)
+    if (!forceJson && choice?.finish_reason === "length") return `${text}\n\n(답변이 길어 여기까지만 보여 드립니다. 질문을 더 좁혀서 물어봐 주세요.)`;
     return text;
   } catch (err) {
     throw toAiError(err);

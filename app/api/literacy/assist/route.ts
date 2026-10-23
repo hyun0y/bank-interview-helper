@@ -23,7 +23,10 @@ export async function POST(request: Request) {
   const crossSite = enforceSameSite(request);
   if (crossSite) return crossSite;
 
-  const limited = enforceRateLimit(request); // ① 요청 상한 (AI 호출 전에 센다)
+  // ① 요청 상한 (AI 호출 전에 센다): 어시스트 질문 전용 상한 → 전체 AI 요청 상한 순서. 어시스트가 범용 AI 창구로 쓰이는 것을 막는다.
+  const assistLimited = enforceRateLimit(request, "assist");
+  if (assistLimited) return assistLimited;
+  const limited = enforceRateLimit(request);
   if (limited) return limited;
 
   const body = await readJsonBody(request, bodySchema); // ② 입력 검사
