@@ -12,6 +12,7 @@
 | `OPENAI_MODEL_QUALITY` | 선택 | 품질 모델 이름. 비우면 `gpt-5.4`를 씁니다. (모범 답변·질문 만들기) |
 | `AI_RATE_LIMIT_MAX` | 선택 | 한 접속 주소가 AI에 보낼 수 있는 요청 수. 비우면 1시간에 100회입니다. |
 | `AI_RATE_LIMIT_WINDOW_SECONDS` | 선택 | 위 요청 수를 세는 시간(초). 비우면 3600초입니다. |
+| `AI_ASSIST_RATE_LIMIT_MAX` | 선택 | AI 어시스트 질문만 따로 세는 상한(위 전체 상한과 별개). 비우면 1시간에 40회입니다. |
 
 - `NEXT_PUBLIC_`으로 시작하는 변수는 **절대 만들지 않습니다.** (브라우저로 노출됩니다)
 - 로컬 `.env`에 있는 `GITHUB_TOKEN`, `SUPABASE_ACCESS_TOKEN`, `VERCEL_TOKEN`은 개발 도구용이며 앱이 쓰지 않으므로 Vercel에 **넣지 않습니다.**

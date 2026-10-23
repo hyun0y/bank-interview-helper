@@ -8,6 +8,9 @@ import { LIMITS } from "@/lib/limits";
 
 type RateLimitConfig = { max: number; windowMs: number };
 
+/** 요청 수를 세는 범위. ai=AI를 부르는 모든 요청, assist=그중 AI 어시스트 질문만 (CHECK.md 3번) */
+export type RateScope = "ai" | "assist";
+
 function readPositiveInt(name: string, fallback: number): number {
   const parsed = Number(process.env[name]);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
@@ -16,10 +19,14 @@ function readPositiveInt(name: string, fallback: number): number {
 /**
  * 기본값은 limits.ts의 값(1시간 100회)이다.
  * 점검할 때만 환경 변수 AI_RATE_LIMIT_MAX, AI_RATE_LIMIT_WINDOW_SECONDS로 바꿔 볼 수 있다.
+ * 어시스트 전용 상한(scope="assist")은 기본 40회이고 AI_ASSIST_RATE_LIMIT_MAX로 바꿔 볼 수 있다.
  */
-export function getRateLimitConfig(): RateLimitConfig {
+export function getRateLimitConfig(scope: RateScope = "ai"): RateLimitConfig {
   return {
-    max: readPositiveInt("AI_RATE_LIMIT_MAX", LIMITS.AI_REQUESTS_PER_WINDOW),
+    max:
+      scope === "assist"
+        ? readPositiveInt("AI_ASSIST_RATE_LIMIT_MAX", LIMITS.ASSIST_REQUESTS_PER_WINDOW)
+        : readPositiveInt("AI_RATE_LIMIT_MAX", LIMITS.AI_REQUESTS_PER_WINDOW),
     windowMs: readPositiveInt("AI_RATE_LIMIT_WINDOW_SECONDS", LIMITS.AI_WINDOW_SECONDS) * 1000,
   };
 }
@@ -59,21 +66,23 @@ function sweep(now: number, windowMs: number) {
  * 요청 1건을 센다. 허용되면 기록하고, 한도를 넘으면 기록하지 않고 언제 다시 가능한지 알려 준다.
  * AI 호출 "전에" 부르므로, 호출이 실패해도 이미 센 것으로 남는다. (비용 보호가 목적)
  */
-export function consumeRateLimit(clientId: string, now: number = Date.now()): RateLimitResult {
-  const { max, windowMs } = getRateLimitConfig();
+export function consumeRateLimit(clientId: string, now: number = Date.now(), scope: RateScope = "ai"): RateLimitResult {
+  const { max, windowMs } = getRateLimitConfig(scope);
+  // 전체 상한의 열쇠는 접속 주소 그대로, 어시스트 상한은 앞에 이름을 붙여 따로 센다.
+  const key = scope === "ai" ? clientId : `${scope}:${clientId}`;
 
-  const times = hits.get(clientId) ?? [];
+  const times = hits.get(key) ?? [];
   while (times.length > 0 && times[0] <= now - windowMs) times.shift();
 
   if (times.length >= max) {
-    hits.delete(clientId);
-    hits.set(clientId, times);
+    hits.delete(key);
+    hits.set(key, times);
     return { allowed: false, limit: max, retryAfterSeconds: Math.max(1, Math.ceil((times[0] + windowMs - now) / 1000)) };
   }
 
   times.push(now);
-  hits.delete(clientId); // 다시 넣어 "가장 최근에 쓴 주소"로 맨 뒤에 둔다.
-  hits.set(clientId, times);
+  hits.delete(key); // 다시 넣어 "가장 최근에 쓴 주소"로 맨 뒤에 둔다.
+  hits.set(key, times);
   if (hits.size > MAX_TRACKED_CLIENTS) sweep(now, windowMs);
   return { allowed: true, limit: max, remaining: max - times.length };
 }
@@ -106,16 +115,18 @@ function describeWait(seconds: number): string {
  * AI를 부르는 API의 맨 앞에서 부른다.
  * - 한도 안이면 null을 돌려준다. (계속 진행)
  * - 한도를 넘으면 429 응답을 돌려준다. 이 응답을 그대로 반환하면 된다.
+ * scope="assist"이면 어시스트 질문만 따로 세는 상한을 확인한다. (전체 상한과 별개)
  */
-export function enforceRateLimit(request: Request): Response | null {
-  const result = consumeRateLimit(getClientId(request));
+export function enforceRateLimit(request: Request, scope: RateScope = "ai"): Response | null {
+  const result = consumeRateLimit(getClientId(request), Date.now(), scope);
   if (result.allowed) return null;
+  const what = scope === "assist" ? "AI 어시스트 질문이" : "AI 요청이";
 
   return Response.json(
     {
       error: {
         code: "rate_limited",
-        message: `AI 요청이 너무 많습니다. ${describeWait(result.retryAfterSeconds)} 뒤에 다시 시도해 주세요.`,
+        message: `${what} 너무 많습니다. ${describeWait(result.retryAfterSeconds)} 뒤에 다시 시도해 주세요.`,
       },
       retryAfterSeconds: result.retryAfterSeconds,
       limit: result.limit,
