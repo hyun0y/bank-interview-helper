@@ -2,7 +2,7 @@
 // Design Ref: §2.3 BEI 입력 `/bei` — ①내용 넣기 → ②개인정보 확인 → ③경험 고르기 → ④질문·꼬리 질문을 이어 주는 부품.
 // 글은 이 화면의 상태(메모리)에만 둔다. 저장하지 않고, ②가 끝나기 전에는 서버로도 보내지 않는다. (PRD 7번)
 // ③으로 넘어갈 때 처음 한 번 AI 전달 동의를 받고, 가린 글을 /api/bei/split으로 보내 경험 후보를 찾는다.
-// ④에서는 고른 경험마다 /api/bei/generate를 동시에 불러 질문·꼬리 질문·모범 답변을 만든다. (경험 1개당 AI 요청 1회)
+// ④에서는 고른 경험마다 /api/bei/generate를 동시에 불러 질문·꼬리 질문·모범 답변을 만들고, 사용자가 원하면 결과를 이 브라우저에 저장한다. (경험 1개당 AI 요청 1회)
 import { useRef, useState } from "react";
 import BeiExperiencePicker from "@/components/BeiExperiencePicker";
 import BeiInput from "@/components/BeiInput";
@@ -10,8 +10,11 @@ import BeiPrivacyReview from "@/components/BeiPrivacyReview";
 import BeiResultView, { type ExperienceResult } from "@/components/BeiResultView";
 import { useEnsureAiConsent } from "@/components/AiConsentProvider";
 import type { ExperienceCandidate, GenerateResponse, SplitResponse } from "@/lib/bei-types";
+import { addSavedResult, buildSavedResult, isSavedBeiResults, type SavedBeiResult } from "@/lib/bei-saved";
 import { LIMITS } from "@/lib/limits";
 import { maskPersonalInfo, type PersonalInfoCounts } from "@/lib/masking";
+import { STORAGE_KEYS } from "@/lib/storage";
+import { useStoredValue } from "@/lib/use-stored-value";
 
 type Step = "input" | "review" | "pick" | "result";
 
@@ -35,6 +38,9 @@ export default function BeiFlow() {
   // ④ 경험 원문(글 그대로)을 열쇠로 한 질문 결과. 같은 경험이면 AI를 다시 부르지 않는다. (불필요한 요청·비용 방지)
   const [results, setResults] = useState<Record<string, ExperienceResult>>({});
   // 같은 글로 다시 [다음]을 눌렀을 때 AI를 또 부르지 않도록 마지막 결과를 기억해 둔다.
+  // 이 브라우저에 저장해 둔 결과(최대 5개)와, 지금 화면의 결과 중 이미 저장한 경험 수
+  const [savedList, saveList] = useStoredValue<SavedBeiResult[]>(STORAGE_KEYS.beiResults, isSavedBeiResults);
+  const [savedDoneCount, setSavedDoneCount] = useState(0);
   const lastSplit = useRef<{ text: string; candidates: ExperienceCandidate[] } | null>(null);
 
   function goToReview() {
@@ -144,12 +150,39 @@ export default function BeiFlow() {
     await Promise.all(toRun.map(generateFor));
   }
 
+  // 질문·답변이 다 만들어진 경험들 (저장할 수 있는 것)
+  const doneExperiences = pickedCandidates.flatMap((candidate) => {
+    const result = results[candidate.excerpt];
+    return result?.status === "done" ? [{ candidate, questions: result.questions }] : [];
+  });
+
+  /** 지금 화면의 결과를 이 브라우저에 저장한다. 원문과 근거 문장은 빼고 저장한다. (lib/bei-saved.ts) */
+  function handleSave() {
+    const built = buildSavedResult(doneExperiences);
+    if (!built) return null;
+    const next = addSavedResult(savedList ?? [], built);
+    const result = saveList(next);
+    if (result.ok) setSavedDoneCount(doneExperiences.length);
+    return { result, total: next.length };
+  }
+
   if (step === "result") {
     return (
       <BeiResultView
-        items={pickedCandidates.map((candidate) => ({ candidate, result: results[candidate.excerpt] }))}
-        onRetry={generateFor}
+        items={pickedCandidates.map((candidate) => ({
+          id: candidate.id,
+          title: candidate.title,
+          summary: candidate.summary,
+          result: results[candidate.excerpt],
+        }))}
+        onRetry={(id) => {
+          const candidate = pickedCandidates.find((item) => item.id === id);
+          if (candidate) void generateFor(candidate);
+        }}
         onBack={() => setStep("pick")}
+        doneCount={doneExperiences.length}
+        savedDoneCount={savedDoneCount}
+        onSave={handleSave}
       />
     );
   }
