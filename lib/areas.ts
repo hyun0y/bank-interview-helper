@@ -34,6 +34,6 @@ export const AREAS: Area[] = [
     title: "토론 면접",
     subtitle: "찬반 연습",
     description: "금융·일반 주제를 고르면 찬성·반대 의견과 새로운 관점을 보여 줍니다.",
-    ready: false,
+    ready: true,
   },
 ];
